@@ -1,0 +1,34 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="SyncDetector.cpp">
+      <Filter>SyncDetector</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="SyncDetector">
+      <UniqueIdentifier>{f3cd9fad-2a73-420b-881c-3d05e52ca616}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FrameBuilder">
+      <UniqueIdentifier>{6daa5726-732d-43d6-944b-6296e5b16397}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="SyncDetector.h">
+      <Filter>SyncDetector</Filter>
+    </ClInclude>
+    <ClInclude Include="FrameBuilder.h">
+      <Filter>FrameBuilder</Filter>
+    </ClInclude>
+    <ClInclude Include="spline.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="SyncDetector.inl">
+      <Filter>SyncDetector</Filter>
+    </None>
+    <None Include="FrameBuilder.inl">
+      <Filter>FrameBuilder</Filter>
+    </None>
+  </ItemGroup>
+</Project>
