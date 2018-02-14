@@ -9,8 +9,8 @@
 //----------------------------------------------------------------------------------------------------------------------
 // Sync detection methods
 //----------------------------------------------------------------------------------------------------------------------
-template<class T>
-std::list<SyncDetector::SyncPulseInfo> SyncDetector::DetectSyncPulses(const std::vector<T>& sampleData, size_t initialSampleNo, size_t sampleCount, unsigned int threadCount) const
+template<class SampleType>
+std::list<SyncDetector::SyncPulseInfo> SyncDetector::DetectSyncPulses(const std::vector<SampleType>& sampleData, size_t initialSampleNo, size_t sampleCount, unsigned int threadCount) const
 {
 	// If the initial sample number isn't valid, abort any further processing.
 	if (initialSampleNo >= sampleData.size())
@@ -41,7 +41,7 @@ std::list<SyncDetector::SyncPulseInfo> SyncDetector::DetectSyncPulses(const std:
 	// the sample data. Since we're using this same calculated info for the entire sample set, it's more efficient to
 	// pre-calculate the min/max info where threading is being used, as this information can be calculated once and
 	// shared between all threads.
-	MinMaxWindowInfo<T> minMaxWindowInfo;
+	MinMaxWindowInfo<SampleType> minMaxWindowInfo;
 	minMaxWindowInfo.slidingWindowEnabled = enableMinMaxSlidingWindow;
 	minMaxWindowInfo.scanSampleStartNo = initialSampleNo;
 	minMaxWindowInfo.scanSampleEndNo = lastSampleNo;
@@ -52,11 +52,11 @@ std::list<SyncDetector::SyncPulseInfo> SyncDetector::DetectSyncPulses(const std:
 	}
 
 	// Build our initial list of run entries for the sample data
-	std::list<RunEntry<T>> runEntries;
+	std::list<RunEntry<SampleType>> runEntries;
 	if (threadCount < 2)
 	{
 		// Build a list of runs in the sample data using a single linear process on one thread
-		CutRunEntry<T> cutRunEntry;
+		CutRunEntry<SampleType> cutRunEntry;
 		runEntries = ExtractRunsFromSampleData(sampleData, initialSampleNo, lastSampleNo, minMaxWindowInfo, cutRunEntry, false, false, false);
 	}
 	else
@@ -66,17 +66,17 @@ std::list<SyncDetector::SyncPulseInfo> SyncDetector::DetectSyncPulses(const std:
 		unsigned int chunkCount = threadCount;
 		size_t samplesPerChunk = sampleCount / chunkCount;
 		std::vector<std::thread> extractRunsThreads;
-		std::vector<std::list<RunEntry<T>>> extractRunsResults(chunkCount);
+		std::vector<std::list<RunEntry<SampleType>>> extractRunsResults(chunkCount);
 		std::vector<size_t> chunkStartPositions(chunkCount);
 		std::vector<size_t> chunkEndPositions(chunkCount);
-		std::vector<CutRunEntry<T>> cutRunEntries(chunkCount);
+		std::vector<CutRunEntry<SampleType>> cutRunEntries(chunkCount);
 		for (unsigned int i = 0; i < chunkCount; ++i)
 		{
 			extractRunsThreads.emplace_back(std::thread([&, i]
 			{
 				chunkStartPositions[i] = initialSampleNo + (i * samplesPerChunk);
 				chunkEndPositions[i] = (i == (threadCount - 1)) ? lastSampleNo : chunkStartPositions[i] + samplesPerChunk;
-				MinMaxWindowInfo<T> minMaxWindowInfoForChunk = minMaxWindowInfo;
+				MinMaxWindowInfo<SampleType> minMaxWindowInfoForChunk = minMaxWindowInfo;
 				extractRunsResults[i] = ExtractRunsFromSampleData(sampleData, chunkStartPositions[i], chunkEndPositions[i], minMaxWindowInfoForChunk, cutRunEntries[i], false, false, false);
 			}));
 		}
@@ -99,8 +99,8 @@ std::list<SyncDetector::SyncPulseInfo> SyncDetector::DetectSyncPulses(const std:
 	//	std::cout << "Processing time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << '\n';
 	//	std::cout << "Comparing single-threaded run:\n";
 	//	start = std::chrono::high_resolution_clock::now();
-	//	CutRunEntry<T> cutRunEntry;
-	//	std::list<RunEntry<T>> runEntriesSingleThreaded = ExtractRunsFromSampleData(sampleData, initialSampleNo, lastSampleNo, minMaxWindowInfo, cutRunEntry, false, false, false);
+	//	CutRunEntry<SampleType> cutRunEntry;
+	//	std::list<RunEntry<SampleType>> runEntriesSingleThreaded = ExtractRunsFromSampleData(sampleData, initialSampleNo, lastSampleNo, minMaxWindowInfo, cutRunEntry, false, false, false);
 	//	auto runEntriesIterator = runEntries.begin();
 	//	auto runEntriesSingleThreadedIterator = runEntriesSingleThreaded.begin();
 	//	bool notifiedOutOfSync = false;
@@ -226,8 +226,8 @@ std::list<SyncDetector::SyncPulseInfo> SyncDetector::DetectSyncPulses(const std:
 }
 
 //----------------------------------------------------------------------------------------------------------------------
-template<class T>
-std::list<SyncDetector::SyncInfo> SyncDetector::DetectSyncEvents(const std::vector<T>& sampleData, const std::list<SyncPulseInfo>& syncPulses) const
+template<class SampleType>
+std::list<SyncDetector::SyncInfo> SyncDetector::DetectSyncEvents(const std::vector<SampleType>& sampleData, const std::list<SyncPulseInfo>& syncPulses) const
 {
 	// At this point, we start assuming significant aspects of video encoding. The first assumption is that the sync
 	// pulses we've identified are in fact hsync and vsync pulses, and possibly equalizer pulses. The second assumption
@@ -368,8 +368,8 @@ std::list<SyncDetector::SyncInfo> SyncDetector::DetectSyncEvents(const std::vect
 }
 
 //----------------------------------------------------------------------------------------------------------------------
-template<class T>
-void SyncDetector::ObtainMinMaxValues(const std::vector<T>& sampleData, size_t samplePos, MinMaxWindowInfo<T>& minMaxInfo) const
+template<class SampleType>
+void SyncDetector::ObtainMinMaxValues(const std::vector<SampleType>& sampleData, size_t samplePos, MinMaxWindowInfo<SampleType>& minMaxInfo) const
 {
 	// Obtain the min/max values for the target sample position
 	size_t minMaxSlidingWindowStartPos = minMaxInfo.scanSampleStartNo;
@@ -402,12 +402,12 @@ void SyncDetector::ObtainMinMaxValues(const std::vector<T>& sampleData, size_t s
 }
 
 //----------------------------------------------------------------------------------------------------------------------
-template<class T>
-std::list<SyncDetector::RunEntry<T>> SyncDetector::ExtractRunsFromSampleData(const std::vector<T>& sampleData, size_t sampleStartNo, size_t sampleEndNo, MinMaxWindowInfo<T>& minMaxInfo, CutRunEntry<T>& cutRunEntry, bool cutRunEntryPopulated, bool resolveCutRunEntryOnly, bool getNextRunEntryOnly) const
+template<class SampleType>
+std::list<SyncDetector::RunEntry<SampleType>> SyncDetector::ExtractRunsFromSampleData(const std::vector<SampleType>& sampleData, size_t sampleStartNo, size_t sampleEndNo, MinMaxWindowInfo<SampleType>& minMaxInfo, CutRunEntry<SampleType>& cutRunEntry, bool cutRunEntryPopulated, bool resolveCutRunEntryOnly, bool getNextRunEntryOnly) const
 {
 	// Populate an initial run entry to fill as we perform run detection
 	size_t currentSampleNo = sampleStartNo;
-	RunEntry<T> runEntry;
+	RunEntry<SampleType> runEntry;
 	if (cutRunEntryPopulated)
 	{
 		runEntry = cutRunEntry.runEntry;
@@ -421,8 +421,8 @@ std::list<SyncDetector::RunEntry<T>> SyncDetector::ExtractRunsFromSampleData(con
 	}
 
 	// Build our list of run entries for the sample set of data
-	MinMaxWindowInfo<T> minMaxInfoAlternate = minMaxInfo;
-	std::list<RunEntry<T>> runEntries;
+	MinMaxWindowInfo<SampleType> minMaxInfoAlternate = minMaxInfo;
+	std::list<RunEntry<SampleType>> runEntries;
 	bool minMaxSampleRangeUpdateRequired = true;
 	double minMaxRunRangeDevianceInSamples = 0;
 	while (currentSampleNo < sampleEndNo)
@@ -460,9 +460,9 @@ std::list<SyncDetector::RunEntry<T>> SyncDetector::ExtractRunsFromSampleData(con
 		}
 
 		// Calculate the effect on the sample deviance in the current run if we add this sample into it
-		T currentSample = sampleData[currentSampleNo];
-		T minElementInRun = std::min(runEntry.minValue, currentSample);
-		T maxElementInRun = std::max(runEntry.maxValue, currentSample);
+		SampleType currentSample = sampleData[currentSampleNo];
+		SampleType minElementInRun = std::min(runEntry.minValue, currentSample);
+		SampleType maxElementInRun = std::max(runEntry.maxValue, currentSample);
 		double minMaxRunRange = (double)maxElementInRun - (double)minElementInRun;
 
 		// If the current sample can be folded into the existing run, combine it now, and advance to the next sample.
@@ -491,8 +491,8 @@ std::list<SyncDetector::RunEntry<T>> SyncDetector::ExtractRunsFromSampleData(con
 
 		// Calculate the effect on the sample deviance in the current run if we add this sample, and drop the first
 		// sample.
-		T minElementInTrimmedRun = *std::min_element(sampleData.cbegin() + runEntry.startSampleNo + 1, sampleData.cbegin() + currentSampleNo + 1);
-		T maxElementInTrimmedRun = *std::max_element(sampleData.cbegin() + runEntry.startSampleNo + 1, sampleData.cbegin() + currentSampleNo + 1);
+		SampleType minElementInTrimmedRun = *std::min_element(sampleData.cbegin() + runEntry.startSampleNo + 1, sampleData.cbegin() + currentSampleNo + 1);
+		SampleType maxElementInTrimmedRun = *std::max_element(sampleData.cbegin() + runEntry.startSampleNo + 1, sampleData.cbegin() + currentSampleNo + 1);
 		double minMaxTrimmedRunRange = (double)maxElementInTrimmedRun - (double)minElementInTrimmedRun;
 
 		// If we can continue the run by dropping the leading sample, do it now, and advance to the next sample.
@@ -537,9 +537,9 @@ std::list<SyncDetector::RunEntry<T>> SyncDetector::ExtractRunsFromSampleData(con
 		size_t runLengthBeforeTrim = runEntry.endSampleNo - runEntry.startSampleNo;
 		size_t runLengthMaxTrimSampleCount = (size_t)((double)runLengthBeforeTrim * runRangeMaxTrimLength);
 		double runRange = (double)runEntry.maxValue - (double)runEntry.minValue;
-		T trimThreshold = (T)((runRange - (runRange * runRangeTrimTolerance)) / 2.0);
-		T trimSampleTooHighThreshold = runEntry.maxValue - trimThreshold;
-		T trimSampleTooLowThreshold = runEntry.minValue;
+		SampleType trimThreshold = (SampleType)((runRange - (runRange * runRangeTrimTolerance)) / 2.0);
+		SampleType trimSampleTooHighThreshold = runEntry.maxValue - trimThreshold;
+		SampleType trimSampleTooLowThreshold = runEntry.minValue;
 		TrimRunEntry(sampleData, runEntry, trimSampleTooHighThreshold, trimSampleTooLowThreshold, runLengthMaxTrimSampleCount);
 
 		// Now that we've trimmed the run, calculate final values for the min, max, and average sample values in the
@@ -584,8 +584,8 @@ std::list<SyncDetector::RunEntry<T>> SyncDetector::ExtractRunsFromSampleData(con
 }
 
 //----------------------------------------------------------------------------------------------------------------------
-template<class T>
-void SyncDetector::MergeChunkResults(const std::vector<T>& sampleData, size_t sampleEndNo, std::list<RunEntry<T>>& runEntries, size_t chunkStartPos, size_t chunkEndPos, std::list<RunEntry<T>>& chunkRunEntries, CutRunEntry<T>& cutRunEntry, MinMaxWindowInfo<T>& minMaxInfo) const
+template<class SampleType>
+void SyncDetector::MergeChunkResults(const std::vector<SampleType>& sampleData, size_t sampleEndNo, std::list<RunEntry<SampleType>>& runEntries, size_t chunkStartPos, size_t chunkEndPos, std::list<RunEntry<SampleType>>& chunkRunEntries, CutRunEntry<SampleType>& cutRunEntry, MinMaxWindowInfo<SampleType>& minMaxInfo) const
 {
 	// If we've already got combined sample data, it's possible there's some overlap between that data and the
 	// data for this chunk, as we complete cut runs between the chunk boundaries, and part of that cut run may
@@ -654,9 +654,9 @@ void SyncDetector::MergeChunkResults(const std::vector<T>& sampleData, size_t sa
 			// chunk, and it's possible that samples within that region were included in creating a run within
 			// this chunk that later got trimmed when it was completed, but initially influenced the run average
 			// and affected its final position and length.
-			CutRunEntry<T> cutRunEntryForRescan;
-			MinMaxWindowInfo<T> minMaxWindowInfoForRescan = cutRunEntry.minMaxInfo;
-			std::list<RunEntry<T>> newRunEntries = ExtractRunsFromSampleData(sampleData, lastRunEntry.endSampleNo, chunkEndPos, minMaxWindowInfoForRescan, cutRunEntryForRescan, false, false, !scanToEndOfChunk);
+			CutRunEntry<SampleType> cutRunEntryForRescan;
+			MinMaxWindowInfo<SampleType> minMaxWindowInfoForRescan = cutRunEntry.minMaxInfo;
+			std::list<RunEntry<SampleType>> newRunEntries = ExtractRunsFromSampleData(sampleData, lastRunEntry.endSampleNo, chunkEndPos, minMaxWindowInfoForRescan, cutRunEntryForRescan, false, false, !scanToEndOfChunk);
 
 			// If we scanned up to the end of this chunk, replace the cut run entry for the chunk.
 			if (scanToEndOfChunk || newRunEntries.empty())
@@ -692,9 +692,9 @@ void SyncDetector::MergeChunkResults(const std::vector<T>& sampleData, size_t sa
 			size_t endScanIndex = chunkEndPos;
 
 			// Obtain the new list of runs in the scan region
-			MinMaxWindowInfo<T> minMaxWindowInfoForRescan = cutRunEntry.minMaxInfo;
-			CutRunEntry<T> cutRunEntryForRescan;
-			std::list<RunEntry<T>> newRunEntries = ExtractRunsFromSampleData(sampleData, startScanIndex, endScanIndex, minMaxWindowInfoForRescan, cutRunEntryForRescan, false, false, false);
+			MinMaxWindowInfo<SampleType> minMaxWindowInfoForRescan = cutRunEntry.minMaxInfo;
+			CutRunEntry<SampleType> cutRunEntryForRescan;
+			std::list<RunEntry<SampleType>> newRunEntries = ExtractRunsFromSampleData(sampleData, startScanIndex, endScanIndex, minMaxWindowInfoForRescan, cutRunEntryForRescan, false, false, false);
 
 			// Merge the list of runs for this chunk into the combined set of runs
 			runEntries.splice(runEntries.end(), std::move(newRunEntries));
@@ -714,8 +714,8 @@ void SyncDetector::MergeChunkResults(const std::vector<T>& sampleData, size_t sa
 	while (lastRunEntryEndPos < chunkEndPos)
 	{
 		// Attempt to resolve the supplied cut run into a run entry
-		MinMaxWindowInfo<T> minMaxWindowInfoForRescan = cutRunEntry.minMaxInfo;
-		std::list<RunEntry<T>> newRunEntries = ExtractRunsFromSampleData(sampleData, cutRunEntry.runEntry.endSampleNo, sampleEndNo, minMaxWindowInfoForRescan, cutRunEntry, true, false, true);
+		MinMaxWindowInfo<SampleType> minMaxWindowInfoForRescan = cutRunEntry.minMaxInfo;
+		std::list<RunEntry<SampleType>> newRunEntries = ExtractRunsFromSampleData(sampleData, cutRunEntry.runEntry.endSampleNo, sampleEndNo, minMaxWindowInfoForRescan, cutRunEntry, true, false, true);
 		if (newRunEntries.empty())
 		{
 			break;
@@ -726,20 +726,20 @@ void SyncDetector::MergeChunkResults(const std::vector<T>& sampleData, size_t sa
 }
 
 //----------------------------------------------------------------------------------------------------------------------
-template<class T>
-void SyncDetector::FilterRunEntriesToSyncCandidates(std::list<RunEntry<T>>& runEntries) const
+template<class SampleType>
+void SyncDetector::FilterRunEntriesToSyncCandidates(std::list<RunEntry<SampleType>>& runEntries) const
 {
 	auto runEntriesIterator = runEntries.begin();
 	while (runEntriesIterator != runEntries.end())
 	{
-		const RunEntry<T>& runEntry = *runEntriesIterator;
+		const RunEntry<SampleType>& runEntry = *runEntriesIterator;
 		double adjacentRunMaxDevianceInSamples = runEntry.initialMinMaxSampleRange * successiveRunAverageDifferenceTolerance;
 
 		// Compare with the previous run entry
 		if (runEntriesIterator != runEntries.begin())
 		{
 			auto previousRunEntryIterator = std::prev(runEntriesIterator, 1);
-			const RunEntry<T>& previousRunEntry = *previousRunEntryIterator;
+			const RunEntry<SampleType>& previousRunEntry = *previousRunEntryIterator;
 			if ((previousRunEntry.averageSample - runEntry.averageSample) > adjacentRunMaxDevianceInSamples)
 			{
 				runEntries.erase(previousRunEntryIterator);
@@ -756,7 +756,7 @@ void SyncDetector::FilterRunEntriesToSyncCandidates(std::list<RunEntry<T>>& runE
 		auto nextRunEntryIterator = std::next(runEntriesIterator, 1);
 		if (nextRunEntryIterator != runEntries.end())
 		{
-			const RunEntry<T>& nextRunEntry = *nextRunEntryIterator;
+			const RunEntry<SampleType>& nextRunEntry = *nextRunEntryIterator;
 			if ((nextRunEntry.averageSample - runEntry.averageSample) > adjacentRunMaxDevianceInSamples)
 			{
 				runEntries.erase(nextRunEntryIterator);
@@ -775,14 +775,14 @@ void SyncDetector::FilterRunEntriesToSyncCandidates(std::list<RunEntry<T>>& runE
 }
 
 //----------------------------------------------------------------------------------------------------------------------
-template<class T>
-void SyncDetector::ErrorCorrectRunEntrySyncCandidates(const std::vector<T>& sampleData, std::list<RunEntry<T>>& runEntries) const
+template<class SampleType>
+void SyncDetector::ErrorCorrectRunEntrySyncCandidates(const std::vector<SampleType>& sampleData, std::list<RunEntry<SampleType>>& runEntries) const
 {
 	auto runEntriesIterator = runEntries.begin();
 	while (runEntriesIterator != runEntries.end())
 	{
 		//##FIX## Do something better with this
-		RunEntry<T>& runEntry = *runEntriesIterator;
+		RunEntry<SampleType>& runEntry = *runEntriesIterator;
 		double ignoreSpikeToleranceInSamples = runEntry.initialMinMaxSampleRange * errorMergeRunAverageDifferenceTolerance;
 		double adjacentRunMaxDevianceInSamples = runEntry.initialMinMaxSampleRange * successiveRunAverageDifferenceTolerance;
 
@@ -791,7 +791,7 @@ void SyncDetector::ErrorCorrectRunEntrySyncCandidates(const std::vector<T>& samp
 		if (runEntriesIterator != runEntries.begin())
 		{
 			auto previousRunEntryIterator = std::prev(runEntriesIterator, 1);
-			const RunEntry<T>& previousRunEntry = *previousRunEntryIterator;
+			const RunEntry<SampleType>& previousRunEntry = *previousRunEntryIterator;
 			size_t previousRunEntryLength = previousRunEntry.endSampleNo - previousRunEntry.startSampleNo;
 			size_t longestRunEntry = std::max(runEntryLength, previousRunEntryLength);
 
@@ -818,7 +818,7 @@ void SyncDetector::ErrorCorrectRunEntrySyncCandidates(const std::vector<T>& samp
 		auto nextRunEntryIterator = std::next(runEntriesIterator, 1);
 		if (nextRunEntryIterator != runEntries.end())
 		{
-			const RunEntry<T>& nextRunEntry = *nextRunEntryIterator;
+			const RunEntry<SampleType>& nextRunEntry = *nextRunEntryIterator;
 			size_t nextRunEntryLength = nextRunEntry.endSampleNo - nextRunEntry.startSampleNo;
 			size_t longestRunEntry = std::max(runEntryLength, nextRunEntryLength);
 
@@ -845,8 +845,8 @@ void SyncDetector::ErrorCorrectRunEntrySyncCandidates(const std::vector<T>& samp
 }
 
 //----------------------------------------------------------------------------------------------------------------------
-template<class T>
-void SyncDetector::CleanRunEntryEdges(const std::vector<T>& sampleData, std::list<RunEntry<T>>& runEntries, size_t sampleStartNo, size_t sampleEndNo) const
+template<class SampleType>
+void SyncDetector::CleanRunEntryEdges(const std::vector<SampleType>& sampleData, std::list<RunEntry<SampleType>>& runEntries, size_t sampleStartNo, size_t sampleEndNo) const
 {
 	//##TODO## Clean this up and comment it
 	for (auto& runEntry : runEntries)
@@ -856,7 +856,7 @@ void SyncDetector::CleanRunEntryEdges(const std::vector<T>& sampleData, std::lis
 		size_t currentSampleIndex = runEntry.endSampleNo + 1;
 		while (currentSampleIndex < sampleEndNo)
 		{
-			T currentSample = sampleData[currentSampleIndex++];
+			SampleType currentSample = sampleData[currentSampleIndex++];
 
 			//##TODO## Comment that we include all low samples
 			if (((double)currentSample - runEntry.averageSample) > minMaxRunRangeDevianceInSamples)
@@ -870,7 +870,7 @@ void SyncDetector::CleanRunEntryEdges(const std::vector<T>& sampleData, std::lis
 		currentSampleIndex = runEntry.startSampleNo;
 		while (currentSampleIndex > sampleStartNo)
 		{
-			T currentSample = sampleData[--currentSampleIndex];
+			SampleType currentSample = sampleData[--currentSampleIndex];
 
 			if (((double)currentSample - runEntry.averageSample) > minMaxRunRangeDevianceInSamples)
 			{
@@ -885,15 +885,15 @@ void SyncDetector::CleanRunEntryEdges(const std::vector<T>& sampleData, std::lis
 		// anything low is something we want to keep.
 		size_t runLengthBeforeTrim = runEntry.endSampleNo - runEntry.startSampleNo;
 		size_t runLengthMaxTrimSampleCount = (size_t)((double)runLengthBeforeTrim * runRangeMaxTrimLength);
-		T trimSampleTooHighThreshold = (T)(runEntry.averageSample + (runEntry.initialMinMaxSampleRange * finalTrimTolerance));
-		T trimSampleTooLowThreshold = std::numeric_limits<T>::min();
+		SampleType trimSampleTooHighThreshold = (SampleType)(runEntry.averageSample + (runEntry.initialMinMaxSampleRange * finalTrimTolerance));
+		SampleType trimSampleTooLowThreshold = std::numeric_limits<SampleType>::min();
 		TrimRunEntry(sampleData, runEntry, trimSampleTooHighThreshold, trimSampleTooLowThreshold, runLengthMaxTrimSampleCount);
 	}
 }
 
 //----------------------------------------------------------------------------------------------------------------------
-template<class T>
-void SyncDetector::TrimRunEntry(const std::vector<T>& sampleData, RunEntry<T>& runEntry, T trimSampleTooHighThreshold, T trimSampleTooLowThreshold, size_t maxTrimSampleCount) const
+template<class SampleType>
+void SyncDetector::TrimRunEntry(const std::vector<SampleType>& sampleData, RunEntry<SampleType>& runEntry, SampleType trimSampleTooHighThreshold, SampleType trimSampleTooLowThreshold, size_t maxTrimSampleCount) const
 {
 	// Trim from the start of the run
 	size_t trimRunStartSampleNo = runEntry.startSampleNo;
@@ -901,7 +901,7 @@ void SyncDetector::TrimRunEntry(const std::vector<T>& sampleData, RunEntry<T>& r
 	while (trimRunStartSampleNo < trimRunEndSampleNo)
 	{
 		// Obtain the next trim candidate
-		T trimSample = sampleData[trimRunStartSampleNo++];
+		SampleType trimSample = sampleData[trimRunStartSampleNo++];
 
 		// If the next sample is outside the trim tolerance, cut it.
 		if ((trimSample > trimSampleTooHighThreshold) || (trimSample < trimSampleTooLowThreshold))
@@ -920,7 +920,7 @@ void SyncDetector::TrimRunEntry(const std::vector<T>& sampleData, RunEntry<T>& r
 	while (trimRunStartSampleNo > trimRunEndSampleNo)
 	{
 		// Obtain the next trim candidate
-		T trimSample = sampleData[trimRunStartSampleNo--];
+		SampleType trimSample = sampleData[trimRunStartSampleNo--];
 
 		// If the next sample is outside the trim tolerance, cut it.
 		if ((trimSample > trimSampleTooHighThreshold) || (trimSample < trimSampleTooLowThreshold))

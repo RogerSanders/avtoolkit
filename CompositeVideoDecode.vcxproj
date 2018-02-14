@@ -117,16 +117,20 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="FrameConverter.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="SyncDetector.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="FileSystemInterop.h" />
     <ClInclude Include="FrameBuilder.h" />
+    <ClInclude Include="FrameConverter.h" />
     <ClInclude Include="spline.h" />
     <ClInclude Include="SyncDetector.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="FrameBuilder.inl" />
+    <None Include="FrameConverter.inl" />
     <None Include="SyncDetector.inl" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -1,8 +1,8 @@
 //----------------------------------------------------------------------------------------------------------------------
 // Frame detection methods
 //----------------------------------------------------------------------------------------------------------------------
-template<class T>
-std::list<FrameBuilder::FrameInfo> FrameBuilder::DetectFrames(const std::vector<T>& sampleData, const std::list<SyncDetector::SyncInfo>& syncInfo) const
+template<class SampleType>
+std::list<FrameBuilder::FrameInfo> FrameBuilder::DetectFrames(const std::vector<SampleType>& sampleData, const std::list<SyncDetector::SyncInfo>& syncInfo) const
 {
 	// Build a list of fields in the current frame
 	std::list<FieldInfo> fields;

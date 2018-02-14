@@ -22,8 +22,8 @@ public:
 
 public:
 	// Frame detection methods
-	template<class T>
-	std::list<FrameInfo> DetectFrames(const std::vector<T>& sampleData, const std::list<SyncDetector::SyncInfo>& syncInfo) const;
+	template<class SampleType>
+	std::list<FrameInfo> DetectFrames(const std::vector<SampleType>& sampleData, const std::list<SyncDetector::SyncInfo>& syncInfo) const;
 };
 
 #include "FrameBuilder.inl"

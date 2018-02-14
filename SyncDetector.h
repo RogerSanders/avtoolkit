@@ -43,21 +43,21 @@ public:
 	void RestoreDefaultSettings();
 
 	// Sync detection methods
-	template<class T>
-	std::list<SyncPulseInfo> DetectSyncPulses(const std::vector<T>& sampleData, size_t initialSampleNo = 0, size_t sampleCount = 0, unsigned int threadCount = 0) const;
-	template<class T>
-	std::list<SyncInfo> DetectSyncEvents(const std::vector<T>& sampleData, const std::list<SyncPulseInfo>& syncPulses) const;
+	template<class SampleType>
+	std::list<SyncPulseInfo> DetectSyncPulses(const std::vector<SampleType>& sampleData, size_t initialSampleNo = 0, size_t sampleCount = 0, unsigned int threadCount = 0) const;
+	template<class SampleType>
+	std::list<SyncInfo> DetectSyncEvents(const std::vector<SampleType>& sampleData, const std::list<SyncPulseInfo>& syncPulses) const;
 
 private:
 	// Structures
-	template <class T>
+	template <class SampleType>
 	struct MinMaxWindowInfo
 	{
 		bool minMaxValuesPopulated;
 		double minMaxSampleRange;
 		//##DEBUG##
-		T minSampleValue;
-		T maxSampleValue;
+		SampleType minSampleValue;
+		SampleType maxSampleValue;
 
 		bool slidingWindowEnabled;
 		size_t scanSampleStartNo;
@@ -65,49 +65,40 @@ private:
 		size_t scanStartPos;
 		size_t scanResetPos;
 	};
-	template <class T>
+	template <class SampleType>
 	struct RunEntry
 	{
 		size_t startSampleNo;
 		size_t endSampleNo;
-		T minValue;
-		T maxValue;
+		SampleType minValue;
+		SampleType maxValue;
 		double initialMinMaxSampleRange;
 		double averageSample;
 	};
-	template <class T>
+	template <class SampleType>
 	struct CutRunEntry
 	{
-		RunEntry<T> runEntry;
-		MinMaxWindowInfo<T> minMaxInfo;
+		RunEntry<SampleType> runEntry;
+		MinMaxWindowInfo<SampleType> minMaxInfo;
 	};
 
 private:
 	// Sync detection methods
-	template<class T>
-	void ObtainMinMaxValues(const std::vector<T>& sampleData, size_t samplePos, MinMaxWindowInfo<T>& minMaxInfo) const;
-	template<class T>
-	std::list<RunEntry<T>> ExtractRunsFromSampleData(const std::vector<T>& sampleData, size_t sampleStartNo, size_t sampleEndNo, MinMaxWindowInfo<T>& minMaxInfo, CutRunEntry<T>& cutRunEntry, bool cutRunEntryPopulated, bool resolveCutRunEntryOnly, bool getNextRunEntryOnly) const;
-	template<class T>
-	void MergeChunkResults(const std::vector<T>& sampleData, size_t sampleEndNo, std::list<RunEntry<T>>& runEntries, size_t chunkStartPos, size_t chunkEndPos, std::list<RunEntry<T>>& chunkRunEntries, CutRunEntry<T>& cutRunEntry, MinMaxWindowInfo<T>& minMaxInfo) const;
-	template<class T>
-	void FilterRunEntriesToSyncCandidates(std::list<RunEntry<T>>& runEntries) const;
-	template<class T>
-	void ErrorCorrectRunEntrySyncCandidates(const std::vector<T>& sampleData, std::list<RunEntry<T>>& runEntries) const;
-	template<class T>
-	void CleanRunEntryEdges(const std::vector<T>& sampleData, std::list<RunEntry<T>>& runEntries, size_t sampleStartNo, size_t sampleEndNo) const;
-	template<class T>
-	void TrimRunEntry(const std::vector<T>& sampleData, RunEntry<T>& runEntry, T trimSampleTooHighThreshold, T trimSampleTooLowThreshold, size_t maxTrimSampleCount) const;
+	template<class SampleType>
+	void ObtainMinMaxValues(const std::vector<SampleType>& sampleData, size_t samplePos, MinMaxWindowInfo<SampleType>& minMaxInfo) const;
+	template<class SampleType>
+	std::list<RunEntry<SampleType>> ExtractRunsFromSampleData(const std::vector<SampleType>& sampleData, size_t sampleStartNo, size_t sampleEndNo, MinMaxWindowInfo<SampleType>& minMaxInfo, CutRunEntry<SampleType>& cutRunEntry, bool cutRunEntryPopulated, bool resolveCutRunEntryOnly, bool getNextRunEntryOnly) const;
+	template<class SampleType>
+	void MergeChunkResults(const std::vector<SampleType>& sampleData, size_t sampleEndNo, std::list<RunEntry<SampleType>>& runEntries, size_t chunkStartPos, size_t chunkEndPos, std::list<RunEntry<SampleType>>& chunkRunEntries, CutRunEntry<SampleType>& cutRunEntry, MinMaxWindowInfo<SampleType>& minMaxInfo) const;
+	template<class SampleType>
+	void FilterRunEntriesToSyncCandidates(std::list<RunEntry<SampleType>>& runEntries) const;
+	template<class SampleType>
+	void ErrorCorrectRunEntrySyncCandidates(const std::vector<SampleType>& sampleData, std::list<RunEntry<SampleType>>& runEntries) const;
+	template<class SampleType>
+	void CleanRunEntryEdges(const std::vector<SampleType>& sampleData, std::list<RunEntry<SampleType>>& runEntries, size_t sampleStartNo, size_t sampleEndNo) const;
+	template<class SampleType>
+	void TrimRunEntry(const std::vector<SampleType>& sampleData, RunEntry<SampleType>& runEntry, SampleType trimSampleTooHighThreshold, SampleType trimSampleTooLowThreshold, size_t maxTrimSampleCount) const;
 	size_t GetMostCommonSyncPulseLength(const std::map<size_t, size_t>& syncPulseLengthCounts) const;
-
-private:
-	//##FIX## We've seen as low as 0.125 for the Mega Drive here. Perhaps we should be using the front porch, and
-	//relying on averaging to cancel out the colour burst? This doesn't work with a quantum signal though, as unlike an
-	//analog signal we've got sampling bias potentially causing us to have a much higher or lower average sample value.
-	//We'd have to fit the sample points to a curve and take a difference of the volumes below and above in order to
-	//avoid this issue. Then again, higher sample rates avoid this problem, and we'll probably get a better result from
-	//a longer averaged run than an often noisy and short trailing run from the last line.
-	const double blankingSampleRatioToSyncWidth = 0.2;
 
 //##DEBUG##
 public:
