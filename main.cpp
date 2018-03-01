@@ -6,14 +6,14 @@
 #include "SyncDetector.h"
 #include "FrameBuilder.h"
 #include "FrameConverter.h"
+#include "SplineHelpers.h"
 
 //----------------------------------------------------------------------------------------
 template<class SampleType>
-void WriteFramesToFiles(const PathString& outputFolderPath, const PathString& outputFileNameBase, const std::vector<SampleType>& sampleData, const std::list<FrameBuilder::FrameInfo>& frameInfo, unsigned int threadCount = 0)
+void WriteFramesToFiles(const PathString& outputFolderPath, const PathString& outputFileNameBase, const std::vector<SampleType>& sampleData, const std::vector<FrameBuilder::FrameInfo>& frames, unsigned int lineWidthInPixels, unsigned int threadCount = 0)
 {
-	size_t frameCount = frameInfo.size();
-
 	// Determine the number of threads to use for this operation
+	size_t frameCount = frames.size();
 	if (threadCount <= 0)
 	{
 		unsigned int coreCount = std::thread::hardware_concurrency();
@@ -23,8 +23,6 @@ void WriteFramesToFiles(const PathString& outputFolderPath, const PathString& ou
 	{
 		threadCount = 1;
 	}
-
-	std::vector<FrameBuilder::FrameInfo> frameInfoAsVector(frameInfo.cbegin(), frameInfo.cend());
 
 	FrameConverter frameConverter;
 
@@ -39,24 +37,9 @@ void WriteFramesToFiles(const PathString& outputFolderPath, const PathString& ou
 			size_t lastFrameNoForChunk = frameNo + framesPerChunk;
 			while (frameNo < lastFrameNoForChunk)
 			{
-				const FrameBuilder::FrameInfo& frameEntry = frameInfoAsVector[frameNo];
-				////##DEBUG##
-				//if (frameNo == 4)
-				//{
-				//	for (auto entry : frameEntry.fieldInfo.front().syncEvents)
-				//	{
-				//		//std::cout << "Sync: " << entry.startSampleNo << "\t" << entry.endSampleNo << "\t" << entry.averageSyncLevel << '\n';
-				//		std::wcout << "Sync: " << entry.startSampleNo << "\t" << entry.endSampleNo << "\t" << entry.endSampleNo - entry.startSampleNo << "\t" << entry.averageSyncLevel << '\n';
-				//	}
-				//}
-				//else
-				//{
-				//	++frameNo;
-				//	continue;
-				//}
-
+				const FrameBuilder::FrameInfo& frameEntry = frames[frameNo];
 				PathString outputFilePath = outputFolderPath + PathSeparatorChar + outputFileNameBase + ToPathString(std::to_string(frameNo) + ".bmp");
-				frameConverter.WriteFrameToFile(outputFilePath, sampleData, frameEntry, 910);
+				frameConverter.WriteFrameToBMP(outputFilePath, sampleData, frameEntry, lineWidthInPixels);
 				++frameNo;
 			}
 		}));
@@ -69,99 +52,52 @@ void WriteFramesToFiles(const PathString& outputFolderPath, const PathString& ou
 
 //----------------------------------------------------------------------------------------
 template<class SampleType>
-void ProcessVideo(const PathString& inputFilePath, const PathString& outputFolderPath, const PathString& outputFileNameBase, bool useSlidingWindow)
+void ProcessVideo(const PathString& inputFilePath, const PathString& outputFolderPath, const PathString& outputFileNameBase, bool useSlidingWindow, unsigned int lineWidthInPixels)
 {
+	//##TODO## Read the file in chunks (default 1GB) and combine chunks together
 	std::ifstream infile(inputFilePath, std::ios_base::binary);
 	infile.seekg(0, infile.end);
-	size_t length = infile.tellg();
+	size_t fileLength = infile.tellg();
 	infile.seekg(0, infile.beg);
 
 	//##DEBUG##
-	//length = 700000;
+	//fileLength = 70000000;
+	//fileLength = 500000000;
 
-	std::vector<SampleType> tempBuffer;
-	tempBuffer.resize(length / sizeof(SampleType));
-	infile.read((char*)&tempBuffer[0], tempBuffer.size() * sizeof(tempBuffer[0]));
+	std::vector<SampleType> fileData;
+	fileData.resize(fileLength / sizeof(SampleType));
+	infile.read((char*)&fileData[0], fileData.size() * sizeof(fileData[0]));
 
 	//##DEBUG##
 	std::cout << "Detecting sync pulses\n";
 
 	SyncDetector syncDetector;
 	syncDetector.enableMinMaxSlidingWindow = useSlidingWindow;
-	std::list<SyncDetector::SyncPulseInfo> syncPulseInfo = syncDetector.DetectSyncPulses(tempBuffer);
-
-	////##DEBUG##
-	//std::map<size_t, std::pair<size_t, std::list<size_t>>> runCountsByLength;
-	//for (auto entry : syncPulseInfo)
-	//{
-	//	auto& countEntry = runCountsByLength[entry.endSampleNo - entry.startSampleNo];
-	//	++countEntry.first;
-	//	countEntry.second.push_back(entry.startSampleNo);
-	//}
-	//for (auto entry : runCountsByLength)
-	//{
-	//	std::wcout << "Length: " << entry.first << "\tCount: " << entry.second.first;
-	//	if (entry.second.first <= 5)
-	//	{
-	//		std::wcout << '\t';
-	//		for (size_t startSampleNo : entry.second.second)
-	//		{
-	//			std::wcout << startSampleNo << ' ';
-	//		}
-	//	}
-	//	std::wcout << '\n';
-	//}
+	std::list<SyncDetector::SyncPulseInfo> syncPulseInfo = syncDetector.DetectSyncPulses(fileData);
 
 	//##DEBUG##
 	std::cout << "Extracting sync events\n";
-
-	std::list<SyncDetector::SyncInfo> syncInfo = syncDetector.DetectSyncEvents(tempBuffer, syncPulseInfo);
-
-	////##DEBUG##
-	//SyncDetector::SyncType lastSyncType;
-	//size_t syncCount = 0;
-	//for (auto entry : syncInfo)
-	//{
-	//	if ((syncCount > 0) && (entry.type == lastSyncType))
-	//	{
-	//		++syncCount;
-	//	}
-	//	else
-	//	{
-	//		if (syncCount > 0)
-	//		{
-	//			std::cout << "Sync: " << (int)lastSyncType << ", " << syncCount << '\n';
-	//		}
-	//		lastSyncType = entry.type;
-	//		syncCount = 1;
-	//	}
-	//}
-	//std::cout << "Sync: " << (int)lastSyncType << ", " << syncCount << '\n';
+	std::list<SyncDetector::SyncInfo> syncInfo = syncDetector.DetectSyncEvents(fileData, syncPulseInfo);
 
 	//##DEBUG##
 	std::cout << "Detecting frames\n";
+	FrameBuilder frameBuilder;
+	//##DEBUG##
+	//frameBuilder.combineInterlacedFields = false;
 
 	// Collect the sync events into frames
-	FrameBuilder frameBuilder;
-	std::list<FrameBuilder::FrameInfo> frameInfo = frameBuilder.DetectFrames(tempBuffer, syncInfo);
+	std::list<FrameBuilder::FieldInfo> fields = frameBuilder.DetectFields(fileData, syncInfo);
 
 	//##DEBUG##
-	//std::cout << "Frames:\n";
-	//for (auto entry : frameInfo)
-	//{
-	//	std::cout << "lineCount: " << entry.fieldInfo.front().syncEvents.size() << "\tLength: " << entry.fieldInfo.front().syncEvents.back().endSampleNo - entry.fieldInfo.front().syncEvents.front().startSampleNo << "\tStart: " << entry.fieldInfo.front().syncEvents.front().startSampleNo << "\tEnd: " << entry.fieldInfo.back().syncEvents.back().startSampleNo << "\n";
-	//}
+	std::cout << "Detecting lines\n";
+	std::vector<FrameBuilder::FrameInfo> frames = frameBuilder.DetectFrames(fields);
+	frameBuilder.DetectLines(fileData, frames);
 
 	//##DEBUG##
 	std::cout << "Writing frames\n";
-	auto start = std::chrono::high_resolution_clock::now();
 
 	// Write frames to files
-	WriteFramesToFiles(outputFolderPath, outputFileNameBase, tempBuffer, frameInfo);
-
-	//##DEBUG##
-	auto end = std::chrono::high_resolution_clock::now();
-	std::cout << "Processing time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << '\n';
+	WriteFramesToFiles(outputFolderPath, outputFileNameBase, fileData, frames, lineWidthInPixels);
 }
 
 //----------------------------------------------------------------------------------------
@@ -175,6 +111,10 @@ int main(int argc, PathChar* argv[])
 	PathString outputFolderPath;
 	PathString outputFileNameBase;
 	bool useSlidingWindow = false;
+	unsigned int lineWidthInPixels = 930; //910 //3640 //7280
+
+	//##DEBUG##
+	auto start = std::chrono::high_resolution_clock::now();
 
 	//##DEBUG##
 	//inputFilePath = ToPathString("D:\\Emulation\\Roms\\MegaLD\\CompExternalRunFailure.bin");
@@ -182,16 +122,22 @@ int main(int argc, PathChar* argv[])
 	//inputFilePath = ToPathString("D:\\Emulation\\Roms\\MegaLD\\CompExternalVSyncMerge.bin");
 	//inputFilePath = ToPathString("D:\\Emulation\\Roms\\MegaLD\\FinalTrimTest.bin");
 
-	inputFilePath = ToPathString("D:\\Emulation\\Roms\\MegaLD\\WindowsDecode\\FantasiaCompositeSigned.bin");
-	outputFolderPath = ToPathString(L"D:\\Emulation\\Roms\\MegaLD\\TestVideoOutputFantasia");
-	outputFileNameBase = ToPathString("Fantasia");
-	ProcessVideo<short>(inputFilePath, outputFolderPath, outputFileNameBase, useSlidingWindow);
+	//inputFilePath = ToPathString("D:\\Emulation\\Roms\\MegaLD\\WindowsDecode\\FantasiaCompositeSigned.bin");
+	//outputFolderPath = ToPathString(L"D:\\Emulation\\Roms\\MegaLD\\TestVideoOutputFantasiaInterlaced3");
+	//outputFileNameBase = ToPathString("Fantasia");
+	//ProcessVideo<short>(inputFilePath, outputFolderPath, outputFileNameBase, useSlidingWindow, lineWidthInPixels);
 
-	//inputFilePath = ToPathString("D:\\Emulation\\Roms\\MegaLD\\CompExternal.raw");
-	//outputFolderPath = ToPathString("D:\\Emulation\\Roms\\MegaLD\\TestVideoOutputSonic");
-	//outputFileNameBase = ToPathString("SonicTest");
-	//useSlidingWindow = true;
-	//ProcessVideo<unsigned char>(inputFilePath, outputFolderPath, outputFileNameBase, useSlidingWindow);
+	inputFilePath = ToPathString("D:\\Emulation\\Roms\\MegaLD\\CompExternal.raw");
+	outputFolderPath = ToPathString("D:\\Emulation\\Roms\\MegaLD\\TestVideoOutputSonic3");
+	outputFileNameBase = ToPathString("SonicTest");
+	useSlidingWindow = true;
+	ProcessVideo<unsigned char>(inputFilePath, outputFolderPath, outputFileNameBase, useSlidingWindow, lineWidthInPixels);
 
+	//##DEBUG##
+	auto end = std::chrono::high_resolution_clock::now();
+	std::cout << "Total time: " << (end - start).count() << "\n";
+
+	//##DEBUG##
+	system("pause");
 	return 0;
 }

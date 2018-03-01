@@ -117,6 +117,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="FrameBuilder.cpp" />
     <ClCompile Include="FrameConverter.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="SyncDetector.cpp" />
@@ -125,7 +126,7 @@
     <ClInclude Include="FileSystemInterop.h" />
     <ClInclude Include="FrameBuilder.h" />
     <ClInclude Include="FrameConverter.h" />
-    <ClInclude Include="spline.h" />
+    <ClInclude Include="SplineHelpers.h" />
     <ClInclude Include="SyncDetector.h" />
   </ItemGroup>
   <ItemGroup>

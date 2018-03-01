@@ -2,9 +2,6 @@
 #include <cmath>
 #include <algorithm>
 #include <thread>
-//##DEBUG##
-#include <chrono>
-#include <iostream>
 
 //----------------------------------------------------------------------------------------------------------------------
 // Sync detection methods
@@ -32,10 +29,6 @@ std::list<SyncDetector::SyncPulseInfo> SyncDetector::DetectSyncPulses(const std:
 	{
 		threadCount = 1;
 	}
-
-	//##DEBUG##
-	std::cout << "Starting run extraction\n";
-	auto start = std::chrono::high_resolution_clock::now();
 
 	// If we're not using a sliding min/max window, retrieve the min/max values for run detection by scanning over all
 	// the sample data. Since we're using this same calculated info for the entire sample set, it's more efficient to
@@ -85,101 +78,12 @@ std::list<SyncDetector::SyncPulseInfo> SyncDetector::DetectSyncPulses(const std:
 			entry.join();
 		}
 
-		//##DEBUG##
-		std::cout << "Merging results\n";
-
 		// Merge the separate lists of runs from each chunk together
 		for (unsigned int i = 0; i < chunkCount; ++i)
 		{
 			MergeChunkResults(sampleData, lastSampleNo, runEntries, chunkStartPositions[i], chunkEndPositions[i], extractRunsResults[i], cutRunEntries[i], minMaxWindowInfo);
 		}
-
-	//	//##DEBUG##
-	//	auto end = std::chrono::high_resolution_clock::now();
-	//	std::cout << "Processing time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << '\n';
-	//	std::cout << "Comparing single-threaded run:\n";
-	//	start = std::chrono::high_resolution_clock::now();
-	//	CutRunEntry<SampleType> cutRunEntry;
-	//	std::list<RunEntry<SampleType>> runEntriesSingleThreaded = ExtractRunsFromSampleData(sampleData, initialSampleNo, lastSampleNo, minMaxWindowInfo, cutRunEntry, false, false, false);
-	//	auto runEntriesIterator = runEntries.begin();
-	//	auto runEntriesSingleThreadedIterator = runEntriesSingleThreaded.begin();
-	//	bool notifiedOutOfSync = false;
-	//	while ((runEntriesIterator != runEntries.end()) && (runEntriesSingleThreadedIterator != runEntriesSingleThreaded.end()))
-	//	{
-	//		auto runEntry = *runEntriesIterator;
-	//		auto runEntrySingleThreaded = *runEntriesSingleThreadedIterator;
-
-	//		if ((runEntry.startSampleNo != runEntrySingleThreaded.startSampleNo)
-	//		 || (runEntry.endSampleNo != runEntrySingleThreaded.endSampleNo)
-	//		 || (runEntry.initialMinMaxSampleRange != runEntrySingleThreaded.initialMinMaxSampleRange)
-	//		 || (runEntry.minValue != runEntrySingleThreaded.minValue)
-	//		 || (runEntry.maxValue != runEntrySingleThreaded.maxValue)
-	//		 || (runEntry.averageSample != runEntrySingleThreaded.averageSample))
-	//		{
-	//			if ((runEntry.startSampleNo != runEntrySingleThreaded.startSampleNo) && (runEntry.endSampleNo != runEntrySingleThreaded.endSampleNo))
-	//			{
-	//				auto runEntriesIteratorNext = std::next(runEntriesIterator, 1);
-	//				auto runEntriesSingleThreadedIteratorNext = std::next(runEntriesSingleThreadedIterator, 1);
-	//				if ((runEntriesIteratorNext != runEntries.end()) && ((runEntriesIteratorNext->startSampleNo == runEntrySingleThreaded.startSampleNo)
-	//																  && (runEntriesIteratorNext->endSampleNo == runEntrySingleThreaded.endSampleNo)
-	//																  && (runEntriesIteratorNext->initialMinMaxSampleRange == runEntrySingleThreaded.initialMinMaxSampleRange)
-	//																  && (runEntriesIteratorNext->minValue == runEntrySingleThreaded.minValue)
-	//																  && (runEntriesIteratorNext->maxValue == runEntrySingleThreaded.maxValue)
-	//																  && (runEntriesIteratorNext->averageSample == runEntrySingleThreaded.averageSample)))
-	//				{
-	//					std::cout << "Extra sample multi threaded:\n"
-	//					          << "startSampleNo\t" << runEntry.startSampleNo << "\t" << runEntrySingleThreaded.startSampleNo << "\n"
-	//					          << "endSampleNo\t" << runEntry.endSampleNo << "\t" << runEntrySingleThreaded.endSampleNo << "\n"
-	//					          << "minMaxRange\t" << runEntry.initialMinMaxSampleRange << "\t" << runEntrySingleThreaded.initialMinMaxSampleRange << "\n"
-	//					          << "minValue\t" << runEntry.minValue << "\t" << runEntrySingleThreaded.minValue << "\n"
-	//					          << "maxValue\t" << runEntry.maxValue << "\t" << runEntrySingleThreaded.maxValue << "\n"
-	//					          << "averageSample\t" << runEntry.averageSample << "\t" << runEntrySingleThreaded.averageSample << "\n";
-	//					runEntriesIterator = runEntriesIteratorNext;
-	//					continue;
-	//				}
-	//				if ((runEntriesSingleThreadedIteratorNext != runEntriesSingleThreaded.end()) && ((runEntry.startSampleNo == runEntriesSingleThreadedIteratorNext->startSampleNo)
-	//																							  && (runEntry.endSampleNo == runEntriesSingleThreadedIteratorNext->endSampleNo)
-	//																							  && (runEntry.initialMinMaxSampleRange == runEntriesSingleThreadedIteratorNext->initialMinMaxSampleRange)
-	//																							  && (runEntry.minValue == runEntriesSingleThreadedIteratorNext->minValue)
-	//																							  && (runEntry.maxValue == runEntriesSingleThreadedIteratorNext->maxValue)
-	//																							  && (runEntry.averageSample == runEntriesSingleThreadedIteratorNext->averageSample)))
-	//				{
-	//					std::cout << "Extra sample single threaded:\n"
-	//					          << "startSampleNo\t" << runEntry.startSampleNo << "\t" << runEntrySingleThreaded.startSampleNo << "\n"
-	//					          << "endSampleNo\t" << runEntry.endSampleNo << "\t" << runEntrySingleThreaded.endSampleNo << "\n"
-	//					          << "minMaxRange\t" << runEntry.initialMinMaxSampleRange << "\t" << runEntrySingleThreaded.initialMinMaxSampleRange << "\n"
-	//					          << "minValue\t" << runEntry.minValue << "\t" << runEntrySingleThreaded.minValue << "\n"
-	//					          << "maxValue\t" << runEntry.maxValue << "\t" << runEntrySingleThreaded.maxValue << "\n"
-	//					          << "averageSample\t" << runEntry.averageSample << "\t" << runEntrySingleThreaded.averageSample << "\n";
-	//					runEntriesSingleThreadedIterator = runEntriesSingleThreadedIteratorNext;
-	//					continue;
-	//				}
-
-	//				if (!notifiedOutOfSync)
-	//				{
-	//					std::cout << "Samples out of sync!\n";
-	//					notifiedOutOfSync = true;
-	//				}
-	//			}
-
-	//			std::cout << "Different sample:\n"
-	//			          << "startSampleNo\t" << runEntry.startSampleNo << "\t" << runEntrySingleThreaded.startSampleNo << "\n"
-	//			          << "endSampleNo\t" << runEntry.endSampleNo << "\t" << runEntrySingleThreaded.endSampleNo << "\n"
-	//			          << "minMaxRange\t" << runEntry.initialMinMaxSampleRange << "\t" << runEntrySingleThreaded.initialMinMaxSampleRange << "\n"
-	//			          << "minValue\t" << runEntry.minValue << "\t" << runEntrySingleThreaded.minValue << "\n"
-	//			          << "maxValue\t" << runEntry.maxValue << "\t" << runEntrySingleThreaded.maxValue << "\n"
-	//			          << "averageSample\t" << runEntry.averageSample << "\t" << runEntrySingleThreaded.averageSample << "\n";
-	//		}
-
-	//		++runEntriesIterator;
-	//		++runEntriesSingleThreadedIterator;
-	//	}
-	//	std::cout << "Run count: " << runEntries.size() << "\t" << runEntriesSingleThreaded.size() << "\n";
 	}
-
-	//##DEBUG##
-	auto end = std::chrono::high_resolution_clock::now();
-	std::cout << "Processing time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << '\n';
 
 	// We have a list of run entries, but we now need to filter down to a set of entries with the lowest values, which
 	// show a reasonably stable level between successive occurrences. This should correctly isolate sync runs from runs
@@ -196,7 +100,6 @@ std::list<SyncDetector::SyncPulseInfo> SyncDetector::DetectSyncPulses(const std:
 	// swings at the join point have resulted in batches of samples inappropriately included or omitted at the ends of
 	// the merged run. We compensate for that here by attempting to extend each run forwards and backwards, then
 	// performing a final trim on both ends to clean it up.
-	//##NOTE## See sample run 190229163 length 121 in FantasiaCompositeSigned.bin for the target case.
 	CleanRunEntryEdges(sampleData, runEntries, initialSampleNo, lastSampleNo);
 
 	//##FIX## Our final cleaning stage needs extra work to more aggressively take in samples which are separated by a
@@ -236,9 +139,6 @@ std::list<SyncDetector::SyncInfo> SyncDetector::DetectSyncEvents(const std::vect
 	// supported variations like changing between interlaced and progressive scan video, we make the assumption here
 	// that the original intent of the data stream is to output video in a consistent mode, and variations in time are
 	// an anomaly in need of correction.
-
-	//##FIX##
-	double syncPulseLengthVariationTolerance = 0.25;
 
 	// At this point, we hopefully have a set of sync pulses falling into two or three main length categories. We do a
 	// quick count of various sync count lengths here:
@@ -352,16 +252,6 @@ std::list<SyncDetector::SyncInfo> SyncDetector::DetectSyncEvents(const std::vect
 		syncInfo.approxMinMaxSampleRange = pulseInfo.approxMinMaxSampleRange;
 		syncInfoList.push_back(syncInfo);
 	}
-
-	// We now have a list of sync blocks, so all that remains to do is detect the average blanking level for each sync
-	// region.
-	//##TODO##
-
-	//// Calculate the average sample value of the blanking region
-	//unsigned long long blankingEndSampleNo = currentSyncEntry.startSampleNo - syncSampleCount;
-	//unsigned long long blankingStartSampleNo = blankingEndSampleNo - (unsigned long long)((double)syncSampleCount * blankingSampleRatioToSyncWidth);
-	//unsigned long long blankingSampleCount = blankingEndSampleNo - blankingStartSampleNo;
-	//currentSyncEntry.averageBlankingLevel = std::accumulate(sampleData.begin() + blankingStartSampleNo, sampleData.begin() + blankingEndSampleNo, 0.0) / (double)blankingSampleCount;
 
 	// Return the set of detected sync events to the caller
 	return syncInfoList;
@@ -606,9 +496,6 @@ void SyncDetector::MergeChunkResults(const std::vector<SampleType>& sampleData, 
 			bool scanToEndOfChunk = false;
 			if (lastRunEntry.endSampleNo >= firstChunkRunEntry.endSampleNo)
 			{
-				//##DEBUG##
-				//std::cout << "Erasing run entry: " << firstChunkRunEntry.startSampleNo << " \t" << firstChunkRunEntry.endSampleNo << "\n";
-
 				// If the run entry we're dropping has the same end position as the last completed run, we're in
 				// sync with the completed run set now, so we flag that here and move on with erasing the
 				// overlapping entry.
@@ -637,9 +524,6 @@ void SyncDetector::MergeChunkResults(const std::vector<SampleType>& sampleData, 
 				// chunk region to resolve the next run.
 				scanToEndOfChunk = true;
 			}
-
-			//##DEBUG##
-			//std::cout << "Cutting run: " << lastRunEntry.startSampleNo << " \t" << lastRunEntry.endSampleNo << "\t" << firstChunkRunEntry.startSampleNo << " \t" << firstChunkRunEntry.endSampleNo << "\n";
 
 			// The first run entry for this chunk is possibly invalid, or we've erased all runs up to the end of
 			// the chunk. In this case, we need to re-scan the region following the end of our completed run
@@ -732,6 +616,7 @@ void SyncDetector::FilterRunEntriesToSyncCandidates(std::list<RunEntry<SampleTyp
 	auto runEntriesIterator = runEntries.begin();
 	while (runEntriesIterator != runEntries.end())
 	{
+		// Obtain information on the current run entry
 		const RunEntry<SampleType>& runEntry = *runEntriesIterator;
 		double adjacentRunMaxDevianceInSamples = runEntry.initialMinMaxSampleRange * successiveRunAverageDifferenceTolerance;
 
@@ -848,35 +733,29 @@ void SyncDetector::ErrorCorrectRunEntrySyncCandidates(const std::vector<SampleTy
 template<class SampleType>
 void SyncDetector::CleanRunEntryEdges(const std::vector<SampleType>& sampleData, std::list<RunEntry<SampleType>>& runEntries, size_t sampleStartNo, size_t sampleEndNo) const
 {
-	//##TODO## Clean this up and comment it
 	for (auto& runEntry : runEntries)
 	{
-		double minMaxRunRangeDevianceInSamples = runEntry.initialMinMaxSampleRange * errorMergeRunAverageDifferenceTolerance; //runRangeValueDeviance;
-
+		// Extend the beginning and end of the run entry to include extra samples that are within tolerance of the
+		// average sample, or below it.
+		double minMaxRunRangeDevianceInSamples = runEntry.initialMinMaxSampleRange * errorMergeRunAverageDifferenceTolerance;
 		size_t currentSampleIndex = runEntry.endSampleNo + 1;
 		while (currentSampleIndex < sampleEndNo)
 		{
 			SampleType currentSample = sampleData[currentSampleIndex++];
-
-			//##TODO## Comment that we include all low samples
 			if (((double)currentSample - runEntry.averageSample) > minMaxRunRangeDevianceInSamples)
 			{
 				break;
 			}
-
 			runEntry.endSampleNo = currentSampleIndex;
 		}
-
 		currentSampleIndex = runEntry.startSampleNo;
 		while (currentSampleIndex > sampleStartNo)
 		{
 			SampleType currentSample = sampleData[--currentSampleIndex];
-
 			if (((double)currentSample - runEntry.averageSample) > minMaxRunRangeDevianceInSamples)
 			{
 				break;
 			}
-
 			runEntry.startSampleNo = currentSampleIndex;
 		}
 

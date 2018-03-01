@@ -31,7 +31,6 @@ public:
 		size_t startSampleNo;
 		size_t endSampleNo;
 		double averageSyncLevel;
-		//double averageBlankingLevel;
 		double approxMinMaxSampleRange;
 	};
 
@@ -112,6 +111,7 @@ public:
 	double errorMergeRunLengthTolerance;
 	bool enableMinMaxSlidingWindow;
 	double minMaxSlidingWindowLength;
+	double syncPulseLengthVariationTolerance;
 	//##TODO## Add parameters to force a min/max sample range as percentage (0.0 - 1.0) of sample range (std::numeric_limits),
 	//and skip all min/max calculation in this case.
 };

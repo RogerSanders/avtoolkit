@@ -5,6 +5,9 @@
     <ClCompile Include="SyncDetector.cpp">
       <Filter>SyncDetector</Filter>
     </ClCompile>
+    <ClCompile Include="FrameBuilder.cpp">
+      <Filter>FrameBuilder</Filter>
+    </ClCompile>
     <ClCompile Include="FrameConverter.cpp">
       <Filter>FrameConverter</Filter>
     </ClCompile>
@@ -19,6 +22,9 @@
     <Filter Include="FrameConverter">
       <UniqueIdentifier>{abd3288c-bd07-4236-9a0e-30e5505ab66b}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Math">
+      <UniqueIdentifier>{93b25eee-e0e6-4c72-9224-167838f8afc1}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="SyncDetector.h">
@@ -27,11 +33,13 @@
     <ClInclude Include="FrameBuilder.h">
       <Filter>FrameBuilder</Filter>
     </ClInclude>
-    <ClInclude Include="spline.h" />
     <ClInclude Include="FrameConverter.h">
       <Filter>FrameConverter</Filter>
     </ClInclude>
     <ClInclude Include="FileSystemInterop.h" />
+    <ClInclude Include="SplineHelpers.h">
+      <Filter>Math</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="SyncDetector.inl">

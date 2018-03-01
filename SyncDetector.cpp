@@ -78,6 +78,10 @@ void SyncDetector::RestoreDefaultSettings()
 	// relative to real time, such as using a window size of 1 second real time.
 	enableMinMaxSlidingWindow = false;
 	minMaxSlidingWindowLength = 0.01;
+
+	// This value defines how much the length of a given sync pulse is allowed to vary from other sync events in the
+	// data stream while still being considered valid.
+	syncPulseLengthVariationTolerance = 0.25;
 }
 
 //----------------------------------------------------------------------------------------------------------------------

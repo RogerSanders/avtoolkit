@@ -5,7 +5,6 @@
 #include "SyncDetector.h"
 #include <string>
 #include <vector>
-#include "spline.h"
 
 class FrameConverter
 {
@@ -15,7 +14,7 @@ public:
 
 	// Frame conversion methods
 	template<class SampleType>
-	void WriteFrameToFile(const PathString& outputFilePath, const std::vector<SampleType>& sampleData, const FrameBuilder::FrameInfo& frameInfo, unsigned int pixelsPerLine) const;
+	void WriteFrameToBMP(const PathString& outputFilePath, const std::vector<SampleType>& sampleData, const FrameBuilder::FrameInfo& frameInfo, unsigned int pixelsPerLine) const;
 
 private:
 	// Enumerations
@@ -54,32 +53,10 @@ private:
 		unsigned int biClrImportant;
 	};
 
-private:
-	// Line analysis methods
-	void FindPreciseLineStartEndPos(const SyncDetector::SyncInfo& leadingSyncInfo, const SyncDetector::SyncInfo& followingSyncInfo, const tk::spline& lineSpline, double& preciseLineStartPos, double& preciseLineEndPos) const;
-	//##TODO##
-	//template<class SampleType>
-	//bool DetectSyncBurst();
-
-	// IRE conversion methods
-	template<class SampleType>
-	float SampleToIRE(SampleType sampleValue, float ireLevel0, float ireLevel100) const;
-	template<class SampleType>
-	SampleType IREToSample(float ire, float ireLevel0, float ireLevel100) const;
-
-	// Resampling methods
-	template<class SampleType>
-	void ResampleLinear(const std::vector<SampleType>& inputData, std::vector<SampleType>& outputData) const;
-	template<class SampleType>
-	void ResampleCubic(const std::vector<SampleType>& inputData, std::vector<SampleType>& outputData) const;
-
 	//##DEBUG##
 public:
 	double blankingPercentage;
 	double blankingLeadingPercentage;
-	double syncSearchPosIncrement;
-	double syncAmplitudeMinTolerance;
-	double slopeValueFlatToleranceAsPercentage;
 };
 
 #include "FrameConverter.inl"
