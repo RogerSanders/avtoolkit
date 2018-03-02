@@ -485,10 +485,16 @@ bool FrameBuilder::RepairColorBurst(const std::vector<SampleType>& backPorchData
 		}
 		else if
 		(
-		    // A gap is present before the next wave, and we've already found at least two waves that match.
+		    // A gap is present before the next burst wave, and we're not looking at the first burst wave. We expect bad
+		    // wave entries to be more common at the beginning and end, so we discard initial wave bursts if we
+		    // encounter any gaps.
 		    (waveGapLength > 0)
 		    && (burstWavesIndex > 0)
-		    // The following wave is within tolerance of its expected length
+		    // The following wave is within tolerance of its expected length. If this isn't the case, it's possible the
+		    // following wave is "compressing" the gap region, so we can't safely fill in the gap until we remove it.
+		    // It's also likely we're reaching the end of the valid burst waves here, and we're encountering
+		    // questionable wave bursts at the end. In this case, we want to remove these following entries rather than
+		    // try and fill in gaps before them.
 		    && (followingWaveLength >= (followingWaveLengthAverage - followingWaveLengthAverageTolerance))
 		    && (followingWaveLength <= (followingWaveLengthAverage + followingWaveLengthAverageTolerance))
 		    &&
