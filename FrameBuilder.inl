@@ -292,7 +292,7 @@ template<class SampleType>
 void FrameBuilder::DetectColorBurst(const std::vector<SampleType>& backPorchData, SampleType zeroLevel, SampleType burstAmplitude, std::vector<ColorBurstWaveInfo>& burstWaves) const
 {
 	// Detect all possible burst waves in the sample region
-	burstWaves.reserve(20);
+	burstWaves.reserve(30);
 	size_t runStartPos = 0;
 	SampleType runPeakSample = backPorchData[0];
 	bool runIsPositive = (runPeakSample > zeroLevel);
@@ -334,7 +334,8 @@ void FrameBuilder::DetectColorBurst(const std::vector<SampleType>& backPorchData
 template<class SampleType>
 bool FrameBuilder::RepairColorBurst(const std::vector<SampleType>& backPorchData, SampleType zeroLevel, SampleType burstAmplitude, std::vector<ColorBurstWaveInfo>& burstWaves) const
 {
-	// Trim leading and trailing wave entries where successive waves have the same "polarity"
+	// Trim leading and trailing wave entries where successive waves have the same "polarity". This can happen
+	// frequently due to noise and other artifacts.
 	while ((burstWaves.size() > 1) && (burstWaves[0].isPositive == burstWaves[1].isPositive))
 	{
 		burstWaves.erase(burstWaves.begin());
@@ -354,9 +355,14 @@ bool FrameBuilder::RepairColorBurst(const std::vector<SampleType>& backPorchData
 	// Build a map of burst wave lengths in samples, snapping close values together. We do this to help determine the
 	// average wave length below. We don't want to take a simple arithmetic mean however, as we expect bad entries with
 	// wildly different lengths to be common, and we don't want them skewing the results. We use these numbers to
-	// essentially "vote" on the average wave length here.
+	// essentially "vote" on the average wave length here. Also note that we track separate averages for positive and
+	// negative burst wave entries. We do this because it's possible our blanking level average is off, possibly from
+	// noise or other interference, in which case our average sample length may be different for positive and negative
+	// pulses.
 	//##TODO## Compare this approach with an arithmetic median calculation.
-	std::map<double, unsigned int> waveLengthAverages;
+	const double colorBurstAverageCalculationTolerance = 0.05;
+	std::map<double, unsigned int> waveLengthAveragesPositive;
+	std::map<double, unsigned int> waveLengthAveragesNegative;
 	for (size_t i = 0; i < burstWaves.size(); ++i)
 	{
 		// Start scanning from the middle of the burst wave entries. We do this, because we expect bad wave entries
@@ -368,7 +374,8 @@ bool FrameBuilder::RepairColorBurst(const std::vector<SampleType>& backPorchData
 
 		// Build our set of common burst wave lengths
 		double waveLength = burstWaves[waveIndex].endPos - burstWaves[waveIndex].startPos;
-		double waveTolerance = waveLength * colorBurstRepairWaveLengthTolerance;
+		double waveTolerance = waveLength * colorBurstAverageCalculationTolerance;
+		auto& waveLengthAverages = (burstWaves[waveIndex].isPositive ? waveLengthAveragesPositive : waveLengthAveragesNegative);
 		auto waveLengthAveragesIterator = waveLengthAverages.begin();
 		while (waveLengthAveragesIterator != waveLengthAverages.end())
 		{
@@ -385,146 +392,164 @@ bool FrameBuilder::RepairColorBurst(const std::vector<SampleType>& backPorchData
 		}
 	}
 
-	// Select the highest occurring wave length as the average wave length
-	double waveLengthAverage = 0.0;
-	unsigned int waveLengthAverageHitCount = 0;
-	for (auto waveLengthAveragesIterator : waveLengthAverages)
+	// Select the highest occurring wave lengths as the average wave lengths for our positive and negative waves
+	double waveLengthAveragePositive = 0.0;
+	unsigned int waveLengthAverageHitCountPositive = 0;
+	for (auto waveLengthAveragesEntry : waveLengthAveragesPositive)
 	{
-		if (waveLengthAveragesIterator.second >= waveLengthAverageHitCount)
+		if (waveLengthAveragesEntry.second >= waveLengthAverageHitCountPositive)
 		{
-			waveLengthAverage = waveLengthAveragesIterator.first;
-			waveLengthAverageHitCount = waveLengthAveragesIterator.second;
+			waveLengthAveragePositive = waveLengthAveragesEntry.first;
+			waveLengthAverageHitCountPositive = waveLengthAveragesEntry.second;
+		}
+	}
+	double waveLengthAverageNegative = 0.0;
+	unsigned int waveLengthAverageHitCountNegative = 0;
+	for (auto waveLengthAveragesEntry : waveLengthAveragesNegative)
+	{
+		if (waveLengthAveragesEntry.second >= waveLengthAverageHitCountNegative)
+		{
+			waveLengthAverageNegative = waveLengthAveragesEntry.first;
+			waveLengthAverageHitCountNegative = waveLengthAveragesEntry.second;
 		}
 	}
 
-	//##FIX##
-	//double waveLengthAverageTolerance = waveLengthAverage * colorBurstRepairWaveLengthTolerance;
-	//unsigned int burstWavesIndex = 0;
-	//while (burstWavesIndex < (burstWaves.size() - 1))
-	//{
-	//	// Calculate the length of the next wave burst, and the length of the gap to the next wave burst. In a valid
-	//	// colour burst, there should be no gap between each entry, as we detect each wave start and end position at the
-	//	// zero crossing point relative to the blanking level.
-	//	double waveLength = burstWaves[burstWavesIndex].endPos - burstWaves[burstWavesIndex].startPos;
-	//	double waveGapLength = burstWaves[burstWavesIndex+1].startPos - burstWaves[burstWavesIndex].endPos;
-
-	//	// Perform error correction on this wave entry
-	//	if ((burstWavesIndex == 0) && ((waveLength < (waveLengthAverage - waveLengthAverageTolerance)) || (waveLength > (waveLengthAverage + waveLengthAverageTolerance))))
-	//	{
-	//		// If we haven't accepted any wave entries as valid yet, and this wave entry doesn't fit within our
-	//		// tolerance of the average wave length, remove it.
-	//		burstWaves.erase(burstWaves.begin());
-	//		continue;
-	//	}
-	//	//##FIX##
-	//	//else if ((burstWavesIndex > 0) && (waveGapLength >= (waveLengthAverage - waveLengthAverageTolerance))) // At least one wave burst has been accepted, and there's a gap to the next burst which can fit at least one wave burst within tolerance of the average.
-
-	//	else if
-	//	(
-	//	    // At least one wave burst has been accepted, and there's a gap to the next burst which can fit at least two wave bursts within tolerance of the average.
-	//	    ((burstWavesIndex > 0) && (waveGapLength >= ((waveLengthAverage - waveLengthAverageTolerance) * 2)))
-	//	    // The gap to the next burst wave and the current burst wave are both within tolerance for the average burst wave length
-	//	 || ((waveGapLength >= (waveLengthAverage - waveLengthAverageTolerance)) && (waveGapLength <= (waveLengthAverage + waveLengthAverageTolerance)) && (waveLength >= (waveLengthAverage - waveLengthAverageTolerance)) && (waveLength <= (waveLengthAverage + waveLengthAverageTolerance)))
-	//	)
-
-	//	//else if (((burstWavesIndex > 0) && (waveGapLength >= ((waveLengthAverage - waveLengthAverageTolerance) * 2))) // At least one wave burst has been accepted, and there's a gap to the next burst which can fit at least one wave burst within tolerance of the average.
-	//	//     || ((waveGapLength >= (waveLength * colorBurstRepairWaveLengthTolerance)) && ((waveGapLength <= (waveLengthAverage + waveLengthAverageTolerance)) && (waveLength >= (waveLengthAverage + waveLengthAverageTolerance))))) // The gap to the next wave burst is within tolerance of the length of this wave burst, 
-	//	{
-	//		// If we need to insert a wave entry before the next wave entry in order to close a gap, do it now.
-	//		ColorBurstWaveInfo predictedWaveInfo;
-	//		predictedWaveInfo.startPos = burstWaves[burstWavesIndex].endPos;
-	//		predictedWaveInfo.endPos = predictedWaveInfo.startPos + waveGapLength;
-	//		predictedWaveInfo.endPos = ((predictedWaveInfo.endPos - predictedWaveInfo.startPos) > (waveLengthAverage + waveLengthAverageTolerance)) ? predictedWaveInfo.startPos + waveLengthAverage : predictedWaveInfo.endPos;
-	//		//predictedWaveInfo.endPos = predictedWaveInfo.startPos + waveLengthAverage;
-	//		//predictedWaveInfo.endPos = ((predictedWaveInfo.endPos - predictedWaveInfo.startPos) > waveGapLength) ? predictedWaveInfo.startPos + waveGapLength : predictedWaveInfo.endPos;
-	//		predictedWaveInfo.isPositive = !burstWaves[burstWavesIndex].isPositive;
-	//		predictedWaveInfo.peakLevel = burstWaves[burstWavesIndex].peakLevel;
-	//		predictedWaveInfo.isPredicted = true;
-	//		burstWaves.insert(burstWaves.begin() + (burstWavesIndex + 1), predictedWaveInfo);
-	//	}
-	//	else if (waveGapLength > 0)
-	//	{
-	//		// If there's a gap to the next wave entry, but it's not large enough to fit a valid wave oscillation into,
-	//		// we need to erase either the current wave entry or following wave entry. If we haven't found at least two
-	//		// good consecutive wave bursts (one full oscillation) yet, or if the current wave is outside the tolerance
-	//		// for the average burst wave length, we assume the leading sample is wrong and that's why we have a gap. In
-	//		// this case, we erase the current wave entry, otherwise we assume the following sample is wrong, in which
-	//		// case we erase the following wave sample.
-	//		if ((burstWavesIndex < 2) || (waveLength < (waveLengthAverage - waveLengthAverageTolerance)) || (waveLength > (waveLengthAverage + waveLengthAverageTolerance)))
-	//		{
-	//			burstWaves.erase(burstWaves.begin() + burstWavesIndex);
-	//		}
-	//		else
-	//		{
-	//			burstWaves.erase(burstWaves.begin() + (burstWavesIndex + 1));
-	//		}
-	//		continue;
-	//	}
-
-	//	// Advance to the next wave entry
-	//	++burstWavesIndex;
-	//}
-
-	//##FIX##
-	double waveLengthAverageTolerance = waveLengthAverage * colorBurstRepairWaveLengthTolerance;
+	// Perform error correction on the burst waves
+	double waveLengthAverageTolerancePositive = waveLengthAveragePositive * colorBurstRepairWaveLengthTolerance;
+	double waveLengthAverageToleranceNegative = waveLengthAverageNegative * colorBurstRepairWaveLengthTolerance;
+	double waveLengthAverageCombined = (waveLengthAveragePositive + waveLengthAverageNegative) / 2.0;
+	double waveLengthAverageToleranceCombined = (waveLengthAverageTolerancePositive + waveLengthAverageToleranceNegative) / 2.0;
 	unsigned int burstWavesIndex = 0;
 	while (burstWavesIndex < (burstWaves.size() - 1))
 	{
-		// Calculate the length of the next wave burst, and the length of the gap to the next wave burst. In a valid
+		double waveLengthAverage;
+		double waveLengthAverageOpposite;
+		double waveLengthAverageTolerance;
+		double waveLengthAverageToleranceOpposite;
+		if (burstWaves[burstWavesIndex].isPositive)
+		{
+			waveLengthAverage = waveLengthAveragePositive;
+			waveLengthAverageOpposite = waveLengthAverageNegative;
+			waveLengthAverageTolerance = waveLengthAverageTolerancePositive;
+			waveLengthAverageToleranceOpposite = waveLengthAverageToleranceNegative;
+		}
+		else
+		{
+			waveLengthAverage = waveLengthAverageNegative;
+			waveLengthAverageOpposite = waveLengthAveragePositive;
+			waveLengthAverageTolerance = waveLengthAverageToleranceNegative;
+			waveLengthAverageToleranceOpposite = waveLengthAverageTolerancePositive;
+		}
+
+		// Calculate the length of the next burst wave, and the length of the gap to the next burst wave. In a valid
 		// colour burst, there should be no gap between each entry, as we detect each wave start and end position at the
 		// zero crossing point relative to the blanking level.
 		double waveLength = burstWaves[burstWavesIndex].endPos - burstWaves[burstWavesIndex].startPos;
 		double waveGapLength = burstWaves[burstWavesIndex+1].startPos - burstWaves[burstWavesIndex].endPos;
 
+		// If a gap is present between this burst wave and the next burst wave, calculate various parameters we'll need
+		// to assess if we can generate entries to fill the gap.
+		double followingWaveLength;
+		double followingWaveLengthAverage;
+		double followingWaveLengthAverageTolerance;
+		unsigned int averageWaveGapFillCount;
+		double minGapLengthForFill;
+		double maxGapLengthForFill;
+		if ((waveGapLength > 0) && (burstWavesIndex > 0))
+		{
+			followingWaveLength = burstWaves[burstWavesIndex+1].endPos - burstWaves[burstWavesIndex+1].startPos;
+			followingWaveLengthAverage = (burstWaves[burstWavesIndex+1].isPositive ? waveLengthAveragePositive : waveLengthAverageNegative);
+			followingWaveLengthAverageTolerance = (burstWaves[burstWavesIndex+1].isPositive ? waveLengthAverageTolerancePositive : waveLengthAverageToleranceNegative);
+			averageWaveGapFillCount = (unsigned int)((waveGapLength + (waveLengthAverageCombined / 2)) / waveLengthAverageCombined);
+			minGapLengthForFill = averageWaveGapFillCount * (waveLengthAverageCombined - waveLengthAverageToleranceCombined);
+			maxGapLengthForFill = averageWaveGapFillCount * (waveLengthAverageCombined + waveLengthAverageToleranceCombined);
+		}
+
 		// Perform error correction on this wave entry
-		if ((burstWavesIndex == 0) && ((waveLength < (waveLengthAverage - waveLengthAverageTolerance)) || (waveLength > (waveLengthAverage + waveLengthAverageTolerance))))
+		if (!burstWaves[burstWavesIndex].isPredicted && ((waveLength < (waveLengthAverage - waveLengthAverageTolerance)) || (waveLength > (waveLengthAverage + waveLengthAverageTolerance))))
 		{
 			// If we haven't accepted any wave entries as valid yet, and this wave entry doesn't fit within our
-			// tolerance of the average wave length, remove it.
-			burstWaves.erase(burstWaves.begin());
+			// tolerance of the average wave length, remove it. Note that we skip this step for predicted wave entries.
+			// Our predicted waves should generally be within tolerance, but due to round off error they may fall very
+			// slightly outside the range when created. If we don't exclude them here, we can enter an infinite loop.
+			burstWaves.erase(burstWaves.begin() + burstWavesIndex);
+
+			// If the wave entry we erased wasn't the first one, step back to the previous wave entry so we can
+			// compare the new next entry with the previous one. If we don't do this and the entry we just erased
+			// was the second last one for example, we'll abort the loop without even examining the last entry.
+			if (burstWavesIndex > 0)
+			{
+				--burstWavesIndex;
+			}
 			continue;
 		}
-		//##FIX##
-		//else if ((burstWavesIndex > 0) && (waveGapLength >= (waveLengthAverage - waveLengthAverageTolerance))) // At least one wave burst has been accepted, and there's a gap to the next burst which can fit at least one wave burst within tolerance of the average.
-
-		//else if
-		//(
-		//    // At least one wave burst has been accepted, and there's a gap to the next burst which can fit at least two wave bursts within tolerance of the average.
-		//    ((burstWavesIndex > 0) && (waveGapLength >= ((waveLengthAverage - waveLengthAverageTolerance) * 2)))
-		//    // The gap to the next burst wave and the current burst wave are both within tolerance for the average burst wave length
-		// || ((waveGapLength >= (waveLengthAverage - waveLengthAverageTolerance)) && (waveGapLength <= (waveLengthAverage + waveLengthAverageTolerance)) && (waveLength >= (waveLengthAverage - waveLengthAverageTolerance)) && (waveLength <= (waveLengthAverage + waveLengthAverageTolerance)))
-		//)
-
-		else if (((burstWavesIndex > 0) && (waveGapLength >= ((waveLengthAverage - waveLengthAverageTolerance) * 2))) // At least one wave burst has been accepted, and there's a gap to the next burst which can fit at least one wave burst within tolerance of the average.
-		     || ((waveGapLength >= (waveLength * colorBurstRepairWaveLengthTolerance)) && ((waveGapLength <= (waveLengthAverage + waveLengthAverageTolerance)) && (waveLength >= (waveLengthAverage + waveLengthAverageTolerance))))) // The gap to the next wave burst is within tolerance of the length of this wave burst, 
+		else if
+		(
+		    // A gap is present before the next wave, and we've already found at least two waves that match.
+		    (waveGapLength > 0)
+		    && (burstWavesIndex > 0)
+		    // The following wave is within tolerance of its expected length
+		    && (followingWaveLength >= (followingWaveLengthAverage - followingWaveLengthAverageTolerance))
+		    && (followingWaveLength <= (followingWaveLengthAverage + followingWaveLengthAverageTolerance))
+		    &&
+		    (
+		        // We can fit a single wave oscillation in the gap, and the polarity of the resulting oscillations will be consistent.
+		        ((waveGapLength >= (waveLengthAverageOpposite - waveLengthAverageToleranceOpposite)) && (waveGapLength <= (waveLengthAverageOpposite + waveLengthAverageToleranceOpposite)) && (burstWaves[burstWavesIndex].isPositive == burstWaves[burstWavesIndex+1].isPositive))
+		        // We can fit multiple wave oscillations in the gap, and the polarity of the resulting oscillations will be consistent.
+		     || ((waveGapLength >= minGapLengthForFill) && (waveGapLength <= maxGapLengthForFill) && (((averageWaveGapFillCount % 2) != 0) == (burstWaves[burstWavesIndex].isPositive == burstWaves[burstWavesIndex+1].isPositive)))
+		    )
+		)
 		{
 			// If we need to insert a wave entry before the next wave entry in order to close a gap, do it now.
-			ColorBurstWaveInfo predictedWaveInfo;
-			predictedWaveInfo.startPos = burstWaves[burstWavesIndex].endPos;
-			predictedWaveInfo.endPos = predictedWaveInfo.startPos + waveGapLength;
-			predictedWaveInfo.endPos = ((predictedWaveInfo.endPos - predictedWaveInfo.startPos) > (waveLengthAverage + waveLengthAverageTolerance)) ? predictedWaveInfo.startPos + waveLengthAverage : predictedWaveInfo.endPos;
-			//predictedWaveInfo.endPos = predictedWaveInfo.startPos + waveLengthAverage;
-			//predictedWaveInfo.endPos = ((predictedWaveInfo.endPos - predictedWaveInfo.startPos) > waveGapLength) ? predictedWaveInfo.startPos + waveGapLength : predictedWaveInfo.endPos;
-			predictedWaveInfo.isPositive = !burstWaves[burstWavesIndex].isPositive;
-			predictedWaveInfo.peakLevel = burstWaves[burstWavesIndex].peakLevel;
-			predictedWaveInfo.isPredicted = true;
-			burstWaves.insert(burstWaves.begin() + (burstWavesIndex + 1), predictedWaveInfo);
+			//##TODO## Consider using the separate averages for positive and negative waves to fill the gap. We'll need
+			// to scale each one by the overall gap length.
+			double gapFillWaveLength = waveGapLength / (double)averageWaveGapFillCount;
+			while (waveGapLength > waveLengthAverageToleranceCombined)
+			{
+				ColorBurstWaveInfo predictedWaveInfo;
+				predictedWaveInfo.isPositive = !burstWaves[burstWavesIndex].isPositive;
+				predictedWaveInfo.startPos = burstWaves[burstWavesIndex].endPos;
+				predictedWaveInfo.endPos = predictedWaveInfo.startPos + gapFillWaveLength;
+				predictedWaveInfo.endPos = (predictedWaveInfo.endPos > burstWaves[burstWavesIndex+1].startPos) ? burstWaves[burstWavesIndex+1].startPos : predictedWaveInfo.endPos;
+				predictedWaveInfo.peakLevel = burstWaves[burstWavesIndex].peakLevel;
+				predictedWaveInfo.isPredicted = true;
+				burstWaves.insert(burstWaves.begin() + (burstWavesIndex + 1), predictedWaveInfo);
+
+				++burstWavesIndex;
+				waveGapLength = burstWaves[burstWavesIndex+1].startPos - burstWaves[burstWavesIndex].endPos;
+			}
+
+			// If we've left a small gap to the next wave entry, close it now. This could occur due to round off error.
+			if (waveGapLength > 0)
+			{
+				burstWaves[burstWavesIndex].endPos = burstWaves[burstWavesIndex+1].startPos;
+			}
+			continue;
 		}
-		else if (waveGapLength > 0)
+		else if ((waveGapLength > 0) || (burstWaves[burstWavesIndex].isPositive == burstWaves[burstWavesIndex+1].isPositive))
 		{
-			// If there's a gap to the next wave entry, but it's not large enough to fit a valid wave oscillation into,
-			// we need to erase either the current wave entry or following wave entry. If we haven't found at least two
-			// good consecutive wave bursts (one full oscillation) yet, or if the current wave is outside the tolerance
-			// for the average burst wave length, we assume the leading sample is wrong and that's why we have a gap. In
-			// this case, we erase the current wave entry, otherwise we assume the following sample is wrong, in which
-			// case we erase the following wave sample.
-			//if ((burstWavesIndex < 2) || (waveLength < (waveLengthAverage - waveLengthAverageTolerance)) || (waveLength > (waveLengthAverage + waveLengthAverageTolerance)))
+			// If there's a gap to the next wave entry but it's not large enough to fit a valid wave oscillation into,
+			// or if we don't have differing polarity of two consecutive wave entries, we need to erase either the
+			// current wave entry or following wave entry. If we haven't found at least two good consecutive burst waves
+			// (one full oscillation) yet, we assume the leading sample is wrong and that's why we have a gap. In this
+			// case, we erase the current wave entry, otherwise we assume the following sample is wrong, in which case
+			// we erase the following wave sample.
 			if (burstWavesIndex < 2)
 			{
+				// Erase the current burst wave entry
 				burstWaves.erase(burstWaves.begin() + burstWavesIndex);
+
+				// If the wave entry we erased wasn't the first one, step back to the previous wave entry so we can
+				// compare the new next entry with the previous one. If we don't do this and the entry we just erased
+				// was the second last one for example, we'll abort the loop without even examining the last entry.
+				if (burstWavesIndex > 0)
+				{
+					--burstWavesIndex;
+				}
 			}
 			else
 			{
+				// Erase the following burst wave entry
 				burstWaves.erase(burstWaves.begin() + (burstWavesIndex + 1));
 			}
 			continue;

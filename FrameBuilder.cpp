@@ -58,9 +58,10 @@ FrameBuilder::FrameBuilder()
 	//double syncAmplitudeMinTolerance = 0.2;
 	//double slopeValueFlatToleranceAsPercentage = 0.3;
 
-	//##TODO## Comment this
-	//##TODO## This needs some slack because we might have the blanking level wrong
-	colorBurstRepairWaveLengthTolerance = 0.2;
+	// This value provides the tolerance to use when determining whether a colour burst wave is valid during the repair
+	// process. Wave entries are only considered valid if they fit within this tolerance of the average length based on
+	// other wave entries detected on that line.
+	colorBurstRepairWaveLengthTolerance = 0.1;
 
 	// When searching for trigger locations on rising and falling edges, an interative search is necessary to locate the
 	// approximate location where the threshold is crossed. This tolerance value affects how precisely we lock to these
