@@ -32,12 +32,12 @@ inline PathString ToPathString(const std::wstring& pathString)
 	return pathString;
 }
 #else
-inline std::string ToPathString(const std::string& pathString)
+inline PathString ToPathString(const std::string& pathString)
 {
 	return pathString;
 }
 
-inline std::string ToPathString(const std::wstring& pathString)
+inline PathString ToPathString(const std::wstring& pathString)
 {
 	std::wstring_convert<std::codecvt_utf8<wchar_t>> conversion;
 	return conversion.to_bytes(pathString);

@@ -230,6 +230,7 @@ void FrameBuilder::DetectLines(const std::vector<SampleType>& sampleData, FieldI
 
 		// Calculate the average level of the leading sync region for the line
 		//##TODO## Compare this with the average calculated by the run
+		//lineInfo.averageSyncLevel = lineInfo.leadingSyncInfo.averageSyncLevel;
 		std::vector<SampleType> upsampledSync((size_t)((lineInfo.leadingSyncInfo.endSampleNo - lineInfo.leadingSyncInfo.startSampleNo) * blankingUpsampleRatio));
 		CubicInterpolateCatmullRom(sampleData.data(), (double)lineInfo.leadingSyncInfo.startSampleNo, (double)lineInfo.leadingSyncInfo.endSampleNo, upsampledSync);
 		lineInfo.averageSyncLevel = std::accumulate(upsampledSync.begin(), upsampledSync.end(), 0.0) / (double)upsampledSync.size();
