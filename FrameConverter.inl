@@ -80,7 +80,7 @@ void FrameConverter::WriteFrameToBMP(const PathString& outputFilePath, const std
 	std::vector<SampleType> activeScanData;
 	std::vector<SampleType> followingData;
 	std::vector<unsigned char> outputData(pixelsPerLine*3);
-	float sampleConversionFactor = ((float)std::numeric_limits<unsigned char>::max() / ((float)std::numeric_limits<SampleType>::max() + -(float)std::numeric_limits<SampleType>::min()));
+	float sampleConversionFactor = (float)((double)std::numeric_limits<unsigned char>::max() / ((double)std::numeric_limits<SampleType>::max() + -(double)std::numeric_limits<SampleType>::min()));
 	for (const FrameBuilder::FieldInfo& fieldInfo : frameInfo.fields)
 	{
 		for (const FrameBuilder::LineInfo& lineInfo : fieldInfo.lines)

@@ -58,6 +58,7 @@ public:
 	void DetectLines(const std::vector<SampleType>& sampleData, std::vector<FrameInfo>& frames, unsigned int threadCount = 0) const;
 
 private:
+	// Trigger detection methods
 	template<class SampleType>
 	double FindSyncRisingEdgeSamplePos(const std::vector<SampleType>& inputData, const SyncDetector::SyncInfo& syncInfo) const;
 	template<class SampleType>
@@ -78,6 +79,10 @@ private:
 	float SampleToIRE(SampleType sampleValue, float ireLevel0, float ireLevel100) const;
 	template<class SampleType>
 	SampleType IREToSample(float ire, float ireLevel0, float ireLevel100) const;
+
+	// Math helper methods
+	template<class Iter>
+	static double FindMedianValue(Iter first, Iter last);
 
 //##DEBUG##
 public:

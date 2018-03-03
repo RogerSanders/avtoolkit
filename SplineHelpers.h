@@ -36,6 +36,9 @@ public:
 	}
 	T Reverse(T targetValue, T searchTolerance)
 	{
+		// Ensure we've been passed a target value which is within the range of x1 and x2
+		assert(((_x0 <= _x1) && (targetValue >= _x0) && (targetValue <= _x1)) || ((_x0 >= _x1) && (targetValue <= _x0) && (targetValue >= _x1)));
+
 		// Calculate our allowable deviance values from the specified target
 		double maxSampleDeviance = (std::abs(_x1 - _x0)) * searchTolerance;
 		double syncEndMinimumSampleValue = targetValue - maxSampleDeviance;
@@ -194,71 +197,6 @@ void CubicInterpolateCatmullRom(const T* data, double startPos, double endPos, s
 		}
 		outputData[currentOutputPos++] = (T)cubicPolynomial.Evaluate(newInputPos - (double)newInputPosInSamples);
 	}
-}
-
-//----------------------------------------------------------------------------------------
-template<class T>
-T CubicInterpolateCatmullRomSearch(T x0, T x1, T x2, T x3, T targetValue, T searchTolerance)
-{
-	// Ensure we've been passed a target value which is within the range of x1 and x2
-	assert(((x1 <= x2) && (targetValue >= x1) && (targetValue <= x2)) || ((x1 >= x2) && (targetValue <= x1) && (targetValue >= x2)));
-
-	// Construct a cubic polynomial to perform repeated cubic interpolation operations between the sample data
-	CubicPolynomial<T> cubicPolynomial = CreateSplineCatmullRomUniform(x0, x1, x2, x3);
-
-	// Calculate our allowable deviance values from the specified target
-	double maxSampleDeviance = (std::abs(x2 - x1)) * searchTolerance;
-	double syncEndMinimumSampleValue = targetValue - maxSampleDeviance;
-	double syncEndMaximumSampleValue = targetValue + maxSampleDeviance;
-
-	// Perform an iterative search for a position between samples x1 and x2 where we're within tolerance of the target
-	// value
-	double searchPos;
-	double searchPosHigh = 1.0;
-	double searchPosLow = 0.0;
-	if (x2 < x1)
-	{
-		while (true)
-		{
-			searchPos = (searchPosLow + ((searchPosHigh - searchPosLow) / 2.0));
-			double curveVal = cubicPolynomial.Evaluate(searchPos);
-
-			if (curveVal < syncEndMinimumSampleValue)
-			{
-				searchPosHigh = searchPos;
-				continue;
-			}
-			else if (curveVal > syncEndMaximumSampleValue)
-			{
-				searchPosLow = searchPos;
-				continue;
-			}
-			break;
-		}
-	}
-	else
-	{
-		while (true)
-		{
-			searchPos = (searchPosLow + ((searchPosHigh - searchPosLow) / 2.0));
-			double curveVal = cubicPolynomial.Evaluate(searchPos);
-
-			if (curveVal < syncEndMinimumSampleValue)
-			{
-				searchPosLow = searchPos;
-				continue;
-			}
-			else if (curveVal > syncEndMaximumSampleValue)
-			{
-				searchPosHigh = searchPos;
-				continue;
-			}
-			break;
-		}
-	}
-
-	// Return the position to the caller
-	return searchPos;
 }
 
 #endif

@@ -7,7 +7,7 @@
 // Sync detection methods
 //----------------------------------------------------------------------------------------------------------------------
 template<class SampleType>
-std::list<SyncDetector::SyncPulseInfo> SyncDetector::DetectSyncPulses(const std::vector<SampleType>& sampleData, size_t initialSampleNo, size_t sampleCount, unsigned int threadCount) const
+std::list<SyncDetector::SyncPulseInfo> SyncDetector::DetectSyncPulses(const std::vector<SampleType>& sampleData, size_t initialSampleNo, size_t sampleCount, size_t initialMinMaxSampleNo, size_t minMaxSampleCount, unsigned int threadCount) const
 {
 	// If the initial sample number isn't valid, abort any further processing.
 	if (initialSampleNo >= sampleData.size())
@@ -17,7 +17,9 @@ std::list<SyncDetector::SyncPulseInfo> SyncDetector::DetectSyncPulses(const std:
 
 	// If no sample count has been specified or it is out of range, default to all sample data from the initial sample.
 	sampleCount = ((sampleCount <= 0) || ((sampleCount + initialSampleNo) > sampleData.size())) ? sampleData.size() - initialSampleNo: sampleCount;
+	minMaxSampleCount = ((minMaxSampleCount <= 0) || ((minMaxSampleCount + initialMinMaxSampleNo) > sampleData.size())) ? sampleData.size() - initialMinMaxSampleNo: minMaxSampleCount;
 	size_t lastSampleNo = initialSampleNo + sampleCount;
+	size_t lastMinMaxSampleNo = initialMinMaxSampleNo + minMaxSampleCount;
 
 	// Determine the number of threads to use for this operation
 	if (threadCount <= 0)
@@ -36,8 +38,8 @@ std::list<SyncDetector::SyncPulseInfo> SyncDetector::DetectSyncPulses(const std:
 	// shared between all threads.
 	MinMaxWindowInfo<SampleType> minMaxWindowInfo;
 	minMaxWindowInfo.slidingWindowEnabled = enableMinMaxSlidingWindow;
-	minMaxWindowInfo.scanSampleStartNo = initialSampleNo;
-	minMaxWindowInfo.scanSampleEndNo = lastSampleNo;
+	minMaxWindowInfo.scanSampleStartNo = initialMinMaxSampleNo;
+	minMaxWindowInfo.scanSampleEndNo = lastMinMaxSampleNo;
 	minMaxWindowInfo.minMaxValuesPopulated = false;
 	if (!enableMinMaxSlidingWindow)
 	{

@@ -10,7 +10,7 @@
 
 //----------------------------------------------------------------------------------------
 template<class SampleType>
-void WriteFramesToFiles(const PathString& outputFolderPath, const PathString& outputFileNameBase, const std::vector<SampleType>& sampleData, const std::vector<FrameBuilder::FrameInfo>& frames, unsigned int lineWidthInPixels, unsigned int threadCount = 0)
+void WriteFramesToFiles(const PathString& outputFolderPath, const PathString& outputFileNameBase, const std::vector<SampleType>& sampleData, const std::vector<FrameBuilder::FrameInfo>& frames, unsigned int lineWidthInPixels, size_t initialFrameNo, unsigned int threadCount = 0)
 {
 	// Determine the number of threads to use for this operation
 	size_t frameCount = frames.size();
@@ -28,17 +28,18 @@ void WriteFramesToFiles(const PathString& outputFolderPath, const PathString& ou
 
 	size_t chunkCount = threadCount;
 	size_t framesPerChunk = frameCount / chunkCount;
+	size_t extraFrames = frameCount - (framesPerChunk * chunkCount);
 	std::vector<std::thread> workerThreads;
 	for (unsigned int i = 0; i < chunkCount; ++i)
 	{
 		workerThreads.emplace_back(std::thread([&, i]
 		{
-			size_t frameNo = i * framesPerChunk;
-			size_t lastFrameNoForChunk = frameNo + framesPerChunk;
+			size_t frameNo = (i * framesPerChunk) + (i > 0 ? extraFrames : 0);
+			size_t lastFrameNoForChunk = frameNo + (framesPerChunk + (i == 0 ? extraFrames : 0));
 			while (frameNo < lastFrameNoForChunk)
 			{
 				const FrameBuilder::FrameInfo& frameEntry = frames[frameNo];
-				PathString outputFilePath = outputFolderPath + PathSeparatorChar + outputFileNameBase + ToPathString(std::to_string(frameNo) + ".bmp");
+				PathString outputFilePath = outputFolderPath + PathSeparatorChar + outputFileNameBase + ToPathString(std::to_string(initialFrameNo + frameNo) + ".bmp");
 				frameConverter.WriteFrameToBMP(outputFilePath, sampleData, frameEntry, lineWidthInPixels);
 				++frameNo;
 			}
@@ -57,50 +58,97 @@ void ProcessVideo(const PathString& inputFilePath, const PathString& outputFolde
 	//##DEBUG##
 	auto start = std::chrono::high_resolution_clock::now();
 
+	//##FIX## Make this configurable
+	//##DEBUG##
+	const size_t maxChunkSizeInBytes = 1024*1024*1024;
+	//const size_t maxChunkSizeInBytes = (size_t)(1024*1024*1024) * 4;
+
 	//##TODO## Read the file in chunks (default 1GB) and combine chunks together
 	std::ifstream infile(inputFilePath, std::ios_base::binary);
 	infile.seekg(0, infile.end);
-	size_t fileLength = infile.tellg();
+	size_t fileLengthInBytes = infile.tellg();
 	infile.seekg(0, infile.beg);
 
 	//##DEBUG##
-	//fileLength = 70000000;
-	//fileLength = 500000000;
+	//fileLengthInBytes = 70000000;
+	//fileLengthInBytes = 500000000;
 
 	std::vector<SampleType> fileData;
-	fileData.resize(fileLength / sizeof(SampleType));
-	infile.read((char*)&fileData[0], fileData.size() * sizeof(fileData[0]));
+	size_t currentFilePos = 0;
+	bool firstPass = true;
+	size_t sampleCountInChunk = 0;
+	size_t continuePos;
+	size_t startFrameNo = 0;
+	while (currentFilePos < fileLengthInBytes)
+	{
+		size_t chunkSizeInBytes = (fileLengthInBytes - currentFilePos);
+		chunkSizeInBytes = (chunkSizeInBytes > maxChunkSizeInBytes) ? maxChunkSizeInBytes : chunkSizeInBytes;
+		sampleCountInChunk = (chunkSizeInBytes / sizeof(SampleType));
 
-	//##DEBUG##
-	std::cout << "Detecting sync pulses\n";
+		size_t fileReadStartPos;
+		size_t sampleScanningStartPos;
+		if (firstPass)
+		{
+			fileData.resize(sampleCountInChunk);
+			sampleScanningStartPos = 0;
+			fileReadStartPos = 0;
+		}
+		else
+		{
+			// Move the last half of the previous chunk data to the start of the data buffer
+			size_t lastSampleCopySize = ((maxChunkSizeInBytes / sizeof(SampleType)) / 2);
+			std::vector<SampleType> tempFileData(lastSampleCopySize + sampleCountInChunk);
+			std::copy(fileData.end() - lastSampleCopySize, fileData.end(), tempFileData.begin());
+			sampleScanningStartPos = lastSampleCopySize - (fileData.size() - continuePos);
+			fileReadStartPos = lastSampleCopySize;
+			fileData = std::move(tempFileData);
+		}
 
-	SyncDetector syncDetector;
-	syncDetector.enableMinMaxSlidingWindow = useSlidingWindow;
-	std::list<SyncDetector::SyncPulseInfo> syncPulseInfo = syncDetector.DetectSyncPulses(fileData);
+		//##DEBUG##
+		std::cout << "Reading " << chunkSizeInBytes << " bytes from file pos " << currentFilePos << "\n";
 
-	//##DEBUG##
-	std::cout << "Extracting sync events\n";
-	std::list<SyncDetector::SyncInfo> syncInfo = syncDetector.DetectSyncEvents(fileData, syncPulseInfo);
+		// Read in new data from the input file
+		infile.read((char*)&fileData[fileReadStartPos], chunkSizeInBytes);
+		currentFilePos += chunkSizeInBytes;
 
-	//##DEBUG##
-	std::cout << "Detecting frames\n";
-	FrameBuilder frameBuilder;
-	//##DEBUG##
-	//frameBuilder.combineInterlacedFields = false;
+		//##DEBUG##
+		std::cout << "Detecting sync pulses\n";
 
-	// Collect the sync events into frames
-	std::list<FrameBuilder::FieldInfo> fields = frameBuilder.DetectFields(fileData, syncInfo);
+		SyncDetector syncDetector;
+		syncDetector.enableMinMaxSlidingWindow = useSlidingWindow;
+		std::list<SyncDetector::SyncPulseInfo> syncPulseInfo = syncDetector.DetectSyncPulses(fileData, sampleScanningStartPos);
 
-	//##DEBUG##
-	std::cout << "Detecting lines\n";
-	std::vector<FrameBuilder::FrameInfo> frames = frameBuilder.DetectFrames(fields);
-	frameBuilder.DetectLines(fileData, frames);
+		//##DEBUG##
+		std::cout << "Extracting sync events\n";
+		std::list<SyncDetector::SyncInfo> syncInfo = syncDetector.DetectSyncEvents(fileData, syncPulseInfo);
 
-	//##DEBUG##
-	std::cout << "Writing frames\n";
+		//##DEBUG##
+		std::cout << "Detecting frames\n";
+		FrameBuilder frameBuilder;
+		//##DEBUG##
+		//frameBuilder.combineInterlacedFields = false;
 
-	// Write frames to files
-	WriteFramesToFiles(outputFolderPath, outputFileNameBase, fileData, frames, lineWidthInPixels);
+		// Collect the sync events into frames
+		std::list<FrameBuilder::FieldInfo> fields = frameBuilder.DetectFields(fileData, syncInfo);
+
+		//##DEBUG##
+		std::cout << "Detecting lines\n";
+		std::vector<FrameBuilder::FrameInfo> frames = frameBuilder.DetectFrames(fields);
+		frameBuilder.DetectLines(fileData, frames);
+		//frameBuilder.DetectLines(fileData, frames, 1);
+
+		//##DEBUG##
+		std::cout << "Writing frames\n";
+
+		// Write frames to files
+		WriteFramesToFiles(outputFolderPath, outputFileNameBase, fileData, frames, lineWidthInPixels, startFrameNo);
+		startFrameNo += frames.size();
+
+		const FrameBuilder::FieldInfo& lastFieldInfo = frames.back().fields.back();
+		const SyncDetector::SyncInfo& targetSyncInfo = lastFieldInfo.syncEvents[lastFieldInfo.syncEvents.size() / 2];
+		continuePos = targetSyncInfo.startSampleNo;
+		firstPass = false;
+	}
 
 	//##DEBUG##
 	auto end = std::chrono::high_resolution_clock::now();
@@ -284,7 +332,7 @@ int main(int argc, PathChar* argv[])
 	//sampleType = SampleType::Int16;
 
 	//inputFilePath = ToPathString("D:\\Emulation\\Roms\\MegaLD\\CompExternal.raw");
-	//outputFolderPath = ToPathString("D:\\Emulation\\Roms\\MegaLD\\TestVideoOutputSonic3");
+	//outputFolderPath = ToPathString("D:\\Emulation\\Roms\\MegaLD\\TestVideoOutputSonic4");
 	//outputFileNameBase = ToPathString("SonicTest");
 	//sampleType = SampleType::UInt8;
 	//useSlidingWindow = true;
@@ -313,6 +361,9 @@ int main(int argc, PathChar* argv[])
 	}
 
 	// Process the target composite video sample data
+	//##TODO## These types are right for the sizes on Windows/Linux, but typedef them into guaranteed sizes in a header.
+	//##TODO## Byte ordering is platform dependent currently. Consider if we want to formally support big endian and
+	//little endian ordering in a platform independent manner.
 	switch (sampleType)
 	{
 	case SampleType::Int8:

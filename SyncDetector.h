@@ -43,7 +43,7 @@ public:
 
 	// Sync detection methods
 	template<class SampleType>
-	std::list<SyncPulseInfo> DetectSyncPulses(const std::vector<SampleType>& sampleData, size_t initialSampleNo = 0, size_t sampleCount = 0, unsigned int threadCount = 0) const;
+	std::list<SyncPulseInfo> DetectSyncPulses(const std::vector<SampleType>& sampleData, size_t initialSampleNo = 0, size_t sampleCount = 0, size_t initialMinMaxSampleNo = 0, size_t minMaxSampleCount = 0, unsigned int threadCount = 0) const;
 	template<class SampleType>
 	std::list<SyncInfo> DetectSyncEvents(const std::vector<SampleType>& sampleData, const std::list<SyncPulseInfo>& syncPulses) const;
 

@@ -2,52 +2,6 @@
 #include <sstream>
 
 //----------------------------------------------------------------------------------------------------------------------
-template<class SampleType>
-double FrameBuilder::FindSyncRisingEdgeSamplePos(const std::vector<SampleType>& inputData, const SyncDetector::SyncInfo& syncInfo) const
-{
-	// Find the point at which we cross the minimum threshold for ending the sync run
-	double syncEndMinimumThreshold = (SampleType)(syncInfo.averageSyncLevel + (syncInfo.approxMinMaxSampleRange * syncAmplitudeMinTolerance));
-	SampleType syncEndMinimumThresholdAsSampleType = (SampleType)syncEndMinimumThreshold;
-	size_t syncEndSearchPos = syncInfo.endSampleNo;
-	while (inputData[syncEndSearchPos] < syncEndMinimumThresholdAsSampleType)
-	{
-		++syncEndSearchPos;
-	}
-	double sampleOffset = CreateSplineCatmullRomUniform((double)inputData[syncEndSearchPos - 2], (double)inputData[syncEndSearchPos - 1], (double)inputData[syncEndSearchPos], (double)inputData[syncEndSearchPos + 1]).Reverse(syncEndMinimumThreshold, slopeDetectionTolerance);
-	return (double)(syncEndSearchPos - 1) + sampleOffset;
-}
-
-//----------------------------------------------------------------------------------------------------------------------
-template<class SampleType>
-double FrameBuilder::FindSyncFallingEdgeSamplePos(const std::vector<SampleType>& inputData, const SyncDetector::SyncInfo& syncInfo) const
-{
-	// Find the point at which we cross the minimum threshold for starting the sync run
-	double syncStartMinimumThreshold = (syncInfo.averageSyncLevel + (syncInfo.approxMinMaxSampleRange * syncAmplitudeMinTolerance));
-	SampleType syncStartMinimumThresholdAsSampleType = (SampleType)syncStartMinimumThreshold;
-	size_t syncStartSearchPos = syncInfo.startSampleNo;
-	while (inputData[syncStartSearchPos] < syncStartMinimumThreshold)
-	{
-		--syncStartSearchPos;
-	}
-	double sampleOffset = CreateSplineCatmullRomUniform((double)inputData[syncStartSearchPos - 1], (double)inputData[syncStartSearchPos], (double)inputData[syncStartSearchPos + 1], (double)inputData[syncStartSearchPos + 2]).Reverse(syncStartMinimumThreshold, slopeDetectionTolerance);
-	return (double)syncStartSearchPos + sampleOffset;
-}
-
-//----------------------------------------------------------------------------------------------------------------------
-template<class SampleType>
-double FrameBuilder::FindSyncRisingEdgeEndSamplePos(const std::vector<SampleType>& inputData, const SyncDetector::SyncInfo& syncInfo, double risingEdgePos) const
-{
-	// Find the point at which the leading sync run levels out to an acceptably flat slope
-	size_t searchPos = (size_t)risingEdgePos;
-	while ((inputData[searchPos+1] > inputData[searchPos]) && (((double)(inputData[searchPos+1] - inputData[searchPos]) / syncInfo.approxMinMaxSampleRange) > slopeValueFlatTolerance))
-	{
-		++searchPos;
-	}
-	++searchPos;
-	return (double)searchPos;
-}
-
-//----------------------------------------------------------------------------------------------------------------------
 // Frame detection methods
 //----------------------------------------------------------------------------------------------------------------------
 template<class SampleType>
@@ -130,13 +84,14 @@ void FrameBuilder::DetectLines(const std::vector<SampleType>& sampleData, std::v
 	// Spawn worker threads to perform line detection in parallel
 	size_t chunkCount = threadCount;
 	size_t framesPerChunk = frameCount / chunkCount;
+	size_t extraFrames = frameCount - (framesPerChunk * chunkCount);
 	std::vector<std::thread> workerThreads;
 	for (unsigned int i = 0; i < chunkCount; ++i)
 	{
 		workerThreads.emplace_back(std::thread([&, i]
 		{
-			size_t frameNo = i * framesPerChunk;
-			size_t lastFrameNoForChunk = frameNo + framesPerChunk;
+			size_t frameNo = (i * framesPerChunk) + (i > 0 ? extraFrames : 0);
+			size_t lastFrameNoForChunk = frameNo + (framesPerChunk + (i == 0 ? extraFrames : 0));
 			while (frameNo < lastFrameNoForChunk)
 			{
 				for (FrameBuilder::FieldInfo& fieldInfo : frames[frameNo].fields)
@@ -196,8 +151,8 @@ void FrameBuilder::DetectLines(const std::vector<SampleType>& sampleData, FieldI
 		lineInfo.frontPorchEndPos = FindSyncFallingEdgeSamplePos(sampleData, lineInfo.followingSyncInfo);
 		double backPorchFlatStartPos = FindSyncRisingEdgeEndSamplePos(sampleData, lineInfo.leadingSyncInfo, lineInfo.backPorchStartPos);
 
-		// Calculate the average level of the back porch region for the line
-		//##TODO## Determine the right approach here
+		// If this line contains active video, calculate an upsampled back porch region to perform more detailed
+		// analysis on.
 		std::vector<SampleType> upsampledBackPorch;
 		double upsampledBackPorchStartPos;
 		double upsampledBackPorchEndPos;
@@ -209,31 +164,23 @@ void FrameBuilder::DetectLines(const std::vector<SampleType>& sampleData, FieldI
 			upsampledBackPorchEndPos = upsampledBackPorchStartPos + backPorchSafeLength;
 			upsampledBackPorch.resize((size_t)(backPorchSafeLength * blankingUpsampleRatio));
 			CubicInterpolateCatmullRom(sampleData.data(), upsampledBackPorchStartPos, upsampledBackPorchEndPos, upsampledBackPorch);
+		}
 
-			//##FIX## This gave very poor results. Run some tests to figure out why.
-			//lineInfo.averageBlankingLevel = std::accumulate(upsampledBackPorch.begin(), upsampledBackPorch.end(), 0.0) / (double)upsampledBackPorch.size();
-			//##DEBUG##
-			double averageBlankingLevelOld = std::accumulate(upsampledBackPorch.begin(), upsampledBackPorch.end(), 0.0) / (double)upsampledBackPorch.size();
-			auto backPorchMinMax = std::minmax_element(upsampledBackPorch.begin(), upsampledBackPorch.end());
-			lineInfo.averageBlankingLevel = (double)*backPorchMinMax.first + (((double)*backPorchMinMax.second - (double)*backPorchMinMax.first) / 2);
-
-			//size_t backPorchSafeLengthInSamples = (size_t)backPorchSafeLength;
-			//size_t backPorchStartSampleNo = (size_t)(lineInfo.backPorchStartPos + 0.5);
-			//size_t backPorchEndSampleNo = backPorchStartSampleNo + backPorchSafeLengthInSamples;
-			//lineInfo.averageBlankingLevel = std::accumulate(sampleData.begin() + backPorchStartSampleNo, sampleData.begin() + backPorchEndSampleNo, 0.0) / (double)(backPorchEndSampleNo - backPorchStartSampleNo);
+		// Calculate the average level of the back porch region for the line
+		if (lineInfo.leadingSyncInfo.type == SyncDetector::SyncType::Horizontal)
+		{
+			lineInfo.averageBlankingLevel = FindMedianValue(upsampledBackPorch.begin(), upsampledBackPorch.end());
 		}
 		else
 		{
+			//##TODO## Consider doing something better here. We could either try and calculate it, or take the blanking
+			//level of the first following line in active scan.
 			size_t backPorchStartSampleNo = (size_t)(backPorchFlatStartPos + 0.5);
 			lineInfo.averageBlankingLevel = sampleData[backPorchStartSampleNo];
 		}
 
 		// Calculate the average level of the leading sync region for the line
-		//##TODO## Compare this with the average calculated by the run
-		//lineInfo.averageSyncLevel = lineInfo.leadingSyncInfo.averageSyncLevel;
-		std::vector<SampleType> upsampledSync((size_t)((lineInfo.leadingSyncInfo.endSampleNo - lineInfo.leadingSyncInfo.startSampleNo) * blankingUpsampleRatio));
-		CubicInterpolateCatmullRom(sampleData.data(), (double)lineInfo.leadingSyncInfo.startSampleNo, (double)lineInfo.leadingSyncInfo.endSampleNo, upsampledSync);
-		lineInfo.averageSyncLevel = std::accumulate(upsampledSync.begin(), upsampledSync.end(), 0.0) / (double)upsampledSync.size();
+		lineInfo.averageSyncLevel = FindMedianValue(sampleData.begin() + lineInfo.leadingSyncInfo.startSampleNo, sampleData.begin() + lineInfo.leadingSyncInfo.endSampleNo);
 
 		// Calculate the IRE levels for this line from the average sync and blanking levels. Sync occurs at IRE -40, and
 		// blanking occurs at IRE 0. From these two reference levels, we can establish our IRE scale.
@@ -284,6 +231,54 @@ void FrameBuilder::DetectLines(const std::vector<SampleType>& sampleData, FieldI
 	{
 		PerformColorBurstLineSyncCorrection(fieldInfo);
 	}
+}
+
+//----------------------------------------------------------------------------------------
+// Trigger detection methods
+//----------------------------------------------------------------------------------------------------------------------
+template<class SampleType>
+double FrameBuilder::FindSyncRisingEdgeSamplePos(const std::vector<SampleType>& inputData, const SyncDetector::SyncInfo& syncInfo) const
+{
+	// Find the point at which we cross the minimum threshold for ending the sync run
+	double syncEndMinimumThreshold = (SampleType)(syncInfo.averageSyncLevel + (syncInfo.approxMinMaxSampleRange * syncAmplitudeMinTolerance));
+	SampleType syncEndMinimumThresholdAsSampleType = (SampleType)syncEndMinimumThreshold;
+	size_t syncEndSearchPos = syncInfo.endSampleNo;
+	while (inputData[syncEndSearchPos] < syncEndMinimumThresholdAsSampleType)
+	{
+		++syncEndSearchPos;
+	}
+	double sampleOffset = CreateSplineCatmullRomUniform((double)inputData[syncEndSearchPos - 2], (double)inputData[syncEndSearchPos - 1], (double)inputData[syncEndSearchPos], (double)inputData[syncEndSearchPos + 1]).Reverse(syncEndMinimumThreshold, slopeDetectionTolerance);
+	return (double)(syncEndSearchPos - 1) + sampleOffset;
+}
+
+//----------------------------------------------------------------------------------------------------------------------
+template<class SampleType>
+double FrameBuilder::FindSyncFallingEdgeSamplePos(const std::vector<SampleType>& inputData, const SyncDetector::SyncInfo& syncInfo) const
+{
+	// Find the point at which we cross the minimum threshold for starting the sync run
+	double syncStartMinimumThreshold = (syncInfo.averageSyncLevel + (syncInfo.approxMinMaxSampleRange * syncAmplitudeMinTolerance));
+	SampleType syncStartMinimumThresholdAsSampleType = (SampleType)syncStartMinimumThreshold;
+	size_t syncStartSearchPos = syncInfo.startSampleNo;
+	while (inputData[syncStartSearchPos] < syncStartMinimumThreshold)
+	{
+		--syncStartSearchPos;
+	}
+	double sampleOffset = CreateSplineCatmullRomUniform((double)inputData[syncStartSearchPos - 1], (double)inputData[syncStartSearchPos], (double)inputData[syncStartSearchPos + 1], (double)inputData[syncStartSearchPos + 2]).Reverse(syncStartMinimumThreshold, slopeDetectionTolerance);
+	return (double)syncStartSearchPos + sampleOffset;
+}
+
+//----------------------------------------------------------------------------------------------------------------------
+template<class SampleType>
+double FrameBuilder::FindSyncRisingEdgeEndSamplePos(const std::vector<SampleType>& inputData, const SyncDetector::SyncInfo& syncInfo, double risingEdgePos) const
+{
+	// Find the point at which the leading sync run levels out to an acceptably flat slope
+	size_t searchPos = (size_t)risingEdgePos;
+	while ((inputData[searchPos+1] > inputData[searchPos]) && (((double)(inputData[searchPos+1] - inputData[searchPos]) / syncInfo.approxMinMaxSampleRange) > slopeValueFlatTolerance))
+	{
+		++searchPos;
+	}
+	++searchPos;
+	return (double)searchPos;
 }
 
 //----------------------------------------------------------------------------------------
@@ -585,4 +580,35 @@ template<class SampleType>
 SampleType FrameBuilder::IREToSample(float ire, float ireLevel0, float ireLevel100) const
 {
 	return (SampleType)(((ire * ((ireLevel100 - ireLevel0) / 100.0f)) + ireLevel0) + (std::numeric_limits<T>::is_integer ? 0.5f : 0.0f));
+}
+
+//----------------------------------------------------------------------------------------------------------------------
+// Math helper methods
+//----------------------------------------------------------------------------------------------------------------------
+template<class Iter>
+double FrameBuilder::FindMedianValue(Iter first, Iter last)
+{
+	typedef typename std::iterator_traits<Iter>::value_type ValueType;
+	std::vector<ValueType> sortedEntries(first, last);
+	std::sort(sortedEntries.begin(), sortedEntries.end());
+
+	double meanValue = 0;
+	size_t entryCount = sortedEntries.size();
+	if (entryCount == 0)
+	{
+		return meanValue;
+	}
+	if ((entryCount & 2) != 0)
+	{
+		auto middleElementIterator = (sortedEntries.begin() + (entryCount >> 1));
+		std::nth_element(sortedEntries.begin(), middleElementIterator, sortedEntries.end());
+		meanValue = (double)*middleElementIterator;
+	}
+	else
+	{
+		auto secondMiddleElementIterator = (sortedEntries.begin() + (entryCount >> 1)) + 1;
+		std::nth_element(sortedEntries.begin(), secondMiddleElementIterator, sortedEntries.end());
+		meanValue = ((double)*secondMiddleElementIterator + (double)*(secondMiddleElementIterator - 1)) / 2;
+	}
+	return meanValue;
 }
