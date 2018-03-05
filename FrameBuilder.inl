@@ -210,8 +210,7 @@ void FrameBuilder::DetectLines(const std::vector<SampleType>& sampleData, FieldI
 			//predict broken hsync pulses.
 			if (!lineInfo.colorBurstValid)
 			{
-				//##DEBUG##
-				std::cout << "Failed to detect colour burst on hsync!\t" << std::fixed << lineInfo.leadingSyncInfo.startSampleNo << "\t" << backPorchFlatStartPos << "\t" << lineInfo.backPorchStartPos << "\t" << lineInfo.frontPorchEndPos << "\n";
+				_logger.Error("Failed to detect colour burst on hsync!\t{0}\t{1}\t{2}\t{3}", lineInfo.leadingSyncInfo.startSampleNo, backPorchFlatStartPos, lineInfo.backPorchStartPos, lineInfo.frontPorchEndPos);
 			}
 
 			// Convert our colour burst wave positions back to absolute sample positions

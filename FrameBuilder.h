@@ -1,7 +1,8 @@
 #ifndef __FRAMEBUILDER_H__
 #define __FRAMEBUILDER_H__
-#include <list>
+#include "Logger.h"
 #include "SyncDetector.h"
+#include <list>
 
 class FrameBuilder
 {
@@ -46,7 +47,7 @@ public:
 
 public:
 	// Constructors
-	FrameBuilder();
+	FrameBuilder(const Logger& logger);
 
 	// Frame detection methods
 	template<class SampleType>
@@ -86,6 +87,7 @@ private:
 
 //##DEBUG##
 public:
+	const Logger& _logger;
 	bool combineInterlacedFields;
 	bool interlaceHalfLineInFirstField;
 	double syncAmplitudeMinTolerance;

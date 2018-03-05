@@ -1,5 +1,6 @@
 #ifndef __SYNCDETECTOR_H__
 #define __SYNCDETECTOR_H__
+#include "Logger.h"
 #include <list>
 #include <vector>
 #include <map>
@@ -36,7 +37,7 @@ public:
 
 public:
 	// Constructors
-	SyncDetector();
+	SyncDetector(const Logger& logger);
 
 	// Settings methods
 	void RestoreDefaultSettings();
@@ -101,6 +102,7 @@ private:
 
 //##DEBUG##
 public:
+	const Logger& _logger;
 	double runRangeValueDeviance;
 	double runRangeTrimTolerance;
 	double runRangeMaxTrimLength;

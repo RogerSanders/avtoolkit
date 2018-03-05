@@ -22,7 +22,7 @@
     <Filter Include="FrameConverter">
       <UniqueIdentifier>{abd3288c-bd07-4236-9a0e-30e5505ab66b}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Math">
+    <Filter Include="Helper Types">
       <UniqueIdentifier>{93b25eee-e0e6-4c72-9224-167838f8afc1}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
@@ -36,9 +36,17 @@
     <ClInclude Include="FrameConverter.h">
       <Filter>FrameConverter</Filter>
     </ClInclude>
-    <ClInclude Include="FileSystemInterop.h" />
     <ClInclude Include="SplineHelpers.h">
-      <Filter>Math</Filter>
+      <Filter>Helper Types</Filter>
+    </ClInclude>
+    <ClInclude Include="FileSystemInterop.h">
+      <Filter>Helper Types</Filter>
+    </ClInclude>
+    <ClInclude Include="Logger.h">
+      <Filter>Helper Types</Filter>
+    </ClInclude>
+    <ClInclude Include="StringHelpers.h">
+      <Filter>Helper Types</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -50,6 +58,9 @@
     </None>
     <None Include="FrameConverter.inl">
       <Filter>FrameConverter</Filter>
+    </None>
+    <None Include="Logger.inl">
+      <Filter>Helper Types</Filter>
     </None>
   </ItemGroup>
 </Project>

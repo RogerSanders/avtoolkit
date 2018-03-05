@@ -2,15 +2,16 @@
 #include <string>
 #include <vector>
 #include <fstream>
+#include "Logger.h"
+#include "StringHelpers.h"
 #include "FileSystemInterop.h"
 #include "SyncDetector.h"
 #include "FrameBuilder.h"
 #include "FrameConverter.h"
-#include "SplineHelpers.h"
 
 //----------------------------------------------------------------------------------------
 template<class SampleType>
-void WriteFramesToFiles(const PathString& outputFolderPath, const PathString& outputFileNameBase, const std::vector<SampleType>& sampleData, const std::vector<FrameBuilder::FrameInfo>& frames, unsigned int lineWidthInPixels, size_t initialFrameNo, unsigned int threadCount = 0)
+void WriteFramesToFiles(const Logger& logger, const PathString& outputFolderPath, const PathString& outputFileNameBase, const std::vector<SampleType>& sampleData, const std::vector<FrameBuilder::FrameInfo>& frames, unsigned int lineWidthInPixels, size_t initialFrameNo, unsigned int threadCount = 0)
 {
 	// Determine the number of threads to use for this operation
 	size_t frameCount = frames.size();
@@ -24,8 +25,7 @@ void WriteFramesToFiles(const PathString& outputFolderPath, const PathString& ou
 		threadCount = 1;
 	}
 
-	FrameConverter frameConverter;
-
+	FrameConverter frameConverter(logger);
 	size_t chunkCount = threadCount;
 	size_t framesPerChunk = frameCount / chunkCount;
 	size_t extraFrames = frameCount - (framesPerChunk * chunkCount);
@@ -52,27 +52,23 @@ void WriteFramesToFiles(const PathString& outputFolderPath, const PathString& ou
 }
 
 //----------------------------------------------------------------------------------------
+//##TODO## Wrap this up in a helper class
 template<class SampleType>
-void ProcessVideo(const PathString& inputFilePath, const PathString& outputFolderPath, const PathString& outputFileNameBase, bool useSlidingWindow, unsigned int lineWidthInPixels)
+void ConvertCompositeVideoToImages(const PathString& inputFilePath, const PathString& outputFolderPath, const PathString& outputFileNameBase, bool useSlidingWindow, unsigned int lineWidthInPixels, size_t maxChunkSizeInBytes)
 {
-	//##DEBUG##
-	auto start = std::chrono::high_resolution_clock::now();
+	// Allocate a logger for this operation
+	Logger logger;
 
-	//##FIX## Make this configurable
-	//##DEBUG##
-	const size_t maxChunkSizeInBytes = 1024*1024*1024;
-	//const size_t maxChunkSizeInBytes = (size_t)(1024*1024*1024) * 4;
+	// Mark the current time so we can calculate our total decode time
+	auto startTime = std::chrono::high_resolution_clock::now();
 
-	//##TODO## Read the file in chunks (default 1GB) and combine chunks together
+	// Open the target file, and calculate the size of the file in bytes.
 	std::ifstream infile(inputFilePath, std::ios_base::binary);
 	infile.seekg(0, infile.end);
 	size_t fileLengthInBytes = infile.tellg();
 	infile.seekg(0, infile.beg);
 
-	//##DEBUG##
-	//fileLengthInBytes = 70000000;
-	//fileLengthInBytes = 500000000;
-
+	// Process the input file and write detected frames out to disk
 	std::vector<SampleType> fileData;
 	size_t currentFilePos = 0;
 	bool firstPass = true;
@@ -81,10 +77,12 @@ void ProcessVideo(const PathString& inputFilePath, const PathString& outputFolde
 	size_t startFrameNo = 0;
 	while (currentFilePos < fileLengthInBytes)
 	{
+		// Calculate the size of the next chunk of file data to read
 		size_t chunkSizeInBytes = (fileLengthInBytes - currentFilePos);
 		chunkSizeInBytes = (chunkSizeInBytes > maxChunkSizeInBytes) ? maxChunkSizeInBytes : chunkSizeInBytes;
 		sampleCountInChunk = (chunkSizeInBytes / sizeof(SampleType));
 
+		// Prepare the memory buffer to receive file data
 		size_t fileReadStartPos;
 		size_t sampleScanningStartPos;
 		if (firstPass)
@@ -92,6 +90,7 @@ void ProcessVideo(const PathString& inputFilePath, const PathString& outputFolde
 			fileData.resize(sampleCountInChunk);
 			sampleScanningStartPos = 0;
 			fileReadStartPos = 0;
+			firstPass = false;
 		}
 		else
 		{
@@ -104,117 +103,53 @@ void ProcessVideo(const PathString& inputFilePath, const PathString& outputFolde
 			fileData = std::move(tempFileData);
 		}
 
-		//##DEBUG##
-		std::cout << "Reading " << chunkSizeInBytes << " bytes from file pos " << currentFilePos << "\n";
-
-		// Read in new data from the input file
+		// Read in the next chunk of file data and store it in the buffer
+		logger.Info("Reading {0} bytes from file pos {1}", chunkSizeInBytes, currentFilePos);
 		infile.read((char*)&fileData[fileReadStartPos], chunkSizeInBytes);
 		currentFilePos += chunkSizeInBytes;
 
-		//##DEBUG##
-		std::cout << "Detecting sync pulses\n";
-
-		SyncDetector syncDetector;
+		// Detect sync pulses in the sample data
+		logger.Info("Detecting sync pulses");
+		SyncDetector syncDetector(logger);
 		syncDetector.enableMinMaxSlidingWindow = useSlidingWindow;
 		std::list<SyncDetector::SyncPulseInfo> syncPulseInfo = syncDetector.DetectSyncPulses(fileData, sampleScanningStartPos);
 
-		//##DEBUG##
-		std::cout << "Extracting sync events\n";
+		// Build sync events from the raw sync pulses
+		logger.Info("Extracting sync events");
 		std::list<SyncDetector::SyncInfo> syncInfo = syncDetector.DetectSyncEvents(fileData, syncPulseInfo);
 
-		//##DEBUG##
-		std::cout << "Detecting frames\n";
-		FrameBuilder frameBuilder;
-		//##DEBUG##
-		//frameBuilder.combineInterlacedFields = false;
-
 		// Collect the sync events into frames
+		logger.Info("Detecting frames");
+		FrameBuilder frameBuilder(logger);
 		std::list<FrameBuilder::FieldInfo> fields = frameBuilder.DetectFields(fileData, syncInfo);
-
-		//##DEBUG##
-		std::cout << "Detecting lines\n";
 		std::vector<FrameBuilder::FrameInfo> frames = frameBuilder.DetectFrames(fields);
+
+		// Decode line information within each detected frame
+		logger.Info("Detecting lines");
 		frameBuilder.DetectLines(fileData, frames);
-		//frameBuilder.DetectLines(fileData, frames, 1);
 
-		//##DEBUG##
-		std::cout << "Writing frames\n";
-
-		// Write frames to files
-		WriteFramesToFiles(outputFolderPath, outputFileNameBase, fileData, frames, lineWidthInPixels, startFrameNo);
+		// Write each detected frame out to an image file
+		logger.Info("Writing frames");
+		WriteFramesToFiles(logger, outputFolderPath, outputFileNameBase, fileData, frames, lineWidthInPixels, startFrameNo);
 		startFrameNo += frames.size();
 
-		const FrameBuilder::FieldInfo& lastFieldInfo = frames.back().fields.back();
-		const SyncDetector::SyncInfo& targetSyncInfo = lastFieldInfo.syncEvents[lastFieldInfo.syncEvents.size() / 2];
-		continuePos = targetSyncInfo.startSampleNo;
-		firstPass = false;
-	}
-
-	//##DEBUG##
-	auto end = std::chrono::high_resolution_clock::now();
-	std::cout << "Total time: " << (end - start).count() << "\n";
-}
-
-//----------------------------------------------------------------------------------------
-bool StringStartsWith(const PathString& targetString, const PathString& searchString, bool caseInsensitive = false)
-{
-	if (targetString.size() < searchString.size())
-	{
-		return false;
-	}
-
-	if (caseInsensitive)
-	{
-		for (size_t i = 0; i < searchString.size(); ++i)
+		// Calculate a position to resume the search from when the next chunk of file data is read
+		if (!frames.empty())
 		{
-			if (toupper(targetString[i]) != toupper(searchString[i]))
-			{
-				return false;
-			}
+			const FrameBuilder::FieldInfo& lastFieldInfo = frames.back().fields.back();
+			const SyncDetector::SyncInfo& targetSyncInfo = lastFieldInfo.syncEvents[lastFieldInfo.syncEvents.size() / 2];
+			continuePos = targetSyncInfo.startSampleNo;
+		}
+		else
+		{
+			continuePos = 0;
 		}
 	}
-	else
-	{
-		for (size_t i = 0; i < searchString.size(); ++i)
-		{
-			if (targetString[i] != searchString[i])
-			{
-				return false;
-			}
-		}
-	}
-	return true;
-}
 
-//----------------------------------------------------------------------------------------
-bool StringEquals(const PathString& value1, const PathString& value2, bool caseInsensitive = false)
-{
-	if (value1.size() != value2.size())
-	{
-		return false;
-	}
-
-	if (caseInsensitive)
-	{
-		for (size_t i = 0; i < value1.size(); ++i)
-		{
-			if (toupper(value1[i]) != toupper(value2[i]))
-			{
-				return false;
-			}
-		}
-	}
-	else
-	{
-		for (size_t i = 0; i < value1.size(); ++i)
-		{
-			if (value1[i] != value2[i])
-			{
-				return false;
-			}
-		}
-	}
-	return true;
+	// Log how long it took to decode the target file
+	auto endTime = std::chrono::high_resolution_clock::now();
+	auto totalTimeInMilliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+	logger.Trace("Total time: {0}", totalTimeInMilliseconds.count());
 }
 
 //----------------------------------------------------------------------------------------
@@ -257,8 +192,10 @@ int main(int argc, PathChar* argv[])
 	PathString outputFileNameBase;
 	bool useSlidingWindow = false;
 	bool outputHelp = false;
-	unsigned int lineWidthInPixels = 930; //910 //3640 //7280
+	unsigned int lineWidthInPixels = 930;
 	SampleType sampleType;
+	//##FIX## Make this configurable
+	size_t maxChunkSizeInBytes = 1024*1024*1024;
 
 	// Process our command line options
 	std::vector<PathString> argPrefixes = { ToPathString("/"), ToPathString("--"), ToPathString("-") };
@@ -325,18 +262,6 @@ int main(int argc, PathChar* argv[])
 		}
 	}
 
-	//##DEBUG##
-	//inputFilePath = ToPathString("D:\\Emulation\\Roms\\MegaLD\\WindowsDecode\\FantasiaCompositeSigned.bin");
-	//outputFolderPath = ToPathString(L"D:\\Emulation\\Roms\\MegaLD\\TestVideoOutputFantasiaInterlaced3");
-	//outputFileNameBase = ToPathString("Fantasia");
-	//sampleType = SampleType::Int16;
-
-	//inputFilePath = ToPathString("D:\\Emulation\\Roms\\MegaLD\\CompExternal.raw");
-	//outputFolderPath = ToPathString("D:\\Emulation\\Roms\\MegaLD\\TestVideoOutputSonic4");
-	//outputFileNameBase = ToPathString("SonicTest");
-	//sampleType = SampleType::UInt8;
-	//useSlidingWindow = true;
-
 	// Validate our command line options
 	if (outputHelp || inputFilePath.empty() || outputFolderPath.empty())
 	{
@@ -367,32 +292,29 @@ int main(int argc, PathChar* argv[])
 	switch (sampleType)
 	{
 	case SampleType::Int8:
-		ProcessVideo<signed char>(inputFilePath, outputFolderPath, outputFileNameBase, useSlidingWindow, lineWidthInPixels);
+		ConvertCompositeVideoToImages<signed char>(inputFilePath, outputFolderPath, outputFileNameBase, useSlidingWindow, lineWidthInPixels, maxChunkSizeInBytes);
 		break;
 	case SampleType::UInt8:
-		ProcessVideo<unsigned char>(inputFilePath, outputFolderPath, outputFileNameBase, useSlidingWindow, lineWidthInPixels);
+		ConvertCompositeVideoToImages<unsigned char>(inputFilePath, outputFolderPath, outputFileNameBase, useSlidingWindow, lineWidthInPixels, maxChunkSizeInBytes);
 		break;
 	case SampleType::Int16:
-		ProcessVideo<short>(inputFilePath, outputFolderPath, outputFileNameBase, useSlidingWindow, lineWidthInPixels);
+		ConvertCompositeVideoToImages<short>(inputFilePath, outputFolderPath, outputFileNameBase, useSlidingWindow, lineWidthInPixels, maxChunkSizeInBytes);
 		break;
 	case SampleType::UInt16:
-		ProcessVideo<unsigned short>(inputFilePath, outputFolderPath, outputFileNameBase, useSlidingWindow, lineWidthInPixels);
+		ConvertCompositeVideoToImages<unsigned short>(inputFilePath, outputFolderPath, outputFileNameBase, useSlidingWindow, lineWidthInPixels, maxChunkSizeInBytes);
 		break;
 	case SampleType::Int32:
-		ProcessVideo<int>(inputFilePath, outputFolderPath, outputFileNameBase, useSlidingWindow, lineWidthInPixels);
+		ConvertCompositeVideoToImages<int>(inputFilePath, outputFolderPath, outputFileNameBase, useSlidingWindow, lineWidthInPixels, maxChunkSizeInBytes);
 		break;
 	case SampleType::UInt32:
-		ProcessVideo<unsigned int>(inputFilePath, outputFolderPath, outputFileNameBase, useSlidingWindow, lineWidthInPixels);
+		ConvertCompositeVideoToImages<unsigned int>(inputFilePath, outputFolderPath, outputFileNameBase, useSlidingWindow, lineWidthInPixels, maxChunkSizeInBytes);
 		break;
 	case SampleType::Float32:
-		ProcessVideo<float>(inputFilePath, outputFolderPath, outputFileNameBase, useSlidingWindow, lineWidthInPixels);
+		ConvertCompositeVideoToImages<float>(inputFilePath, outputFolderPath, outputFileNameBase, useSlidingWindow, lineWidthInPixels, maxChunkSizeInBytes);
 		break;
 	case SampleType::Float64:
-		ProcessVideo<double>(inputFilePath, outputFolderPath, outputFileNameBase, useSlidingWindow, lineWidthInPixels);
+		ConvertCompositeVideoToImages<double>(inputFilePath, outputFolderPath, outputFileNameBase, useSlidingWindow, lineWidthInPixels, maxChunkSizeInBytes);
 		break;
 	}
-
-	//##DEBUG##
-	system("pause");
 	return 0;
 }

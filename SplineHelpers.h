@@ -28,13 +28,14 @@ public:
 		_c[3] = (2*x0) - (2*x1) + t0 + t1;
 	}
 
-	T Evaluate(T t)
+	T Evaluate(T t) const
 	{
 		T t2 = t * t;
 		T t3 = t2 * t;
 		return _c[0] + (_c[1]*t) + (_c[2]*t2) + (_c[3]*t3);
 	}
-	T Reverse(T targetValue, T searchTolerance)
+
+	T Reverse(T targetValue, T searchTolerance) const
 	{
 		// Ensure we've been passed a target value which is within the range of x1 and x2
 		assert(((_x0 <= _x1) && (targetValue >= _x0) && (targetValue <= _x1)) || ((_x0 >= _x1) && (targetValue <= _x0) && (targetValue >= _x1)));
@@ -100,6 +101,49 @@ private:
 	T _c[4];
 	T _x0;
 	T _x1;
+};
+
+//----------------------------------------------------------------------------------------
+template<class T>
+class CubicSpline
+{
+public:
+	CubicSpline(const T* samples, size_t sampleCount)
+	{
+		// Ensure at least four sample values have been supplied
+		assert(sampleCount >= 4);
+
+		// Build our set of cubic polynomials covering the full range of input data. We use the slope of the leading and
+		// trailing line segments to predict an extra point before and after our supplied sample data, so we can
+		// generate cubic polynomials to interpolate between the first and last data points.
+		_polynomials.reserve(sampleCount);
+		double convertedSamples[4];
+		convertedSamples[1] = (double)*(samples++);
+		convertedSamples[2] = (double)*(samples++);
+		convertedSamples[0] = convertedSamples[1] + (convertedSamples[1] - convertedSamples[2]);
+		unsigned int convertedSamplePos = 3;
+		for (size_t i = 0; i < (sampleCount - 2); ++i)
+		{
+			convertedSamples[convertedSamplePos] = (double)*(samples++);
+			convertedSamplePos = (convertedSamplePos + 1) & 3;
+			_polynomials.emplace_back(CreateSplineCatmullRomUniform(convertedSamples[(convertedSamplePos + 0) & 3], convertedSamples[(convertedSamplePos + 1) & 3], convertedSamples[(convertedSamplePos + 2) & 3], convertedSamples[(convertedSamplePos + 3) & 3]));
+		}
+		convertedSamples[(convertedSamplePos + 3) & 3] = convertedSamples[(convertedSamplePos + 2) & 3] + (convertedSamples[(convertedSamplePos + 2) & 3] - convertedSamples[(convertedSamplePos + 1) & 3]);
+		convertedSamplePos = (convertedSamplePos + 1) & 3;
+		_polynomials.emplace_back(CreateSplineCatmullRomUniform(convertedSamples[(convertedSamplePos + 0) & 3], convertedSamples[(convertedSamplePos + 1) & 3], convertedSamples[(convertedSamplePos + 2) & 3], convertedSamples[(convertedSamplePos + 3) & 3]));
+	}
+
+	double Evaluate(double samplePos)
+	{
+		size_t sampleBaseNo = (size_t)samplePos;
+		double sampleOffset = samplePos - sampleBaseNo;
+		sampleBaseNo = ((sampleOffset == 0) && (sampleBaseNo > 0)) ? (sampleBaseNo - 1) : sampleBaseNo;
+		CubicPolynomial<double>& cubicPolynomial = _polynomials[sampleBaseNo];
+		return cubicPolynomial.Evaluate(sampleOffset);
+	}
+
+private:
+	std::vector<CubicPolynomial<double>> _polynomials;
 };
 
 //----------------------------------------------------------------------------------------

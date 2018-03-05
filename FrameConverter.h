@@ -1,5 +1,6 @@
 #ifndef __FRAMECONVERTER_H__
 #define __FRAMECONVERTER_H__
+#include "Logger.h"
 #include "FileSystemInterop.h"
 #include "FrameBuilder.h"
 #include "SyncDetector.h"
@@ -10,7 +11,7 @@ class FrameConverter
 {
 public:
 	// Constructors
-	FrameConverter();
+	FrameConverter(const Logger& logger);
 
 	// Frame conversion methods
 	template<class SampleType>
@@ -53,8 +54,9 @@ private:
 		unsigned int biClrImportant;
 	};
 
-	//##DEBUG##
+//##DEBUG##
 public:
+	const Logger& _logger;
 	double blankingPercentage;
 	double blankingLeadingPercentage;
 };

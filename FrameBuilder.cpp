@@ -5,7 +5,8 @@
 //----------------------------------------------------------------------------------------
 // Constructors
 //----------------------------------------------------------------------------------------
-FrameBuilder::FrameBuilder()
+FrameBuilder::FrameBuilder(const Logger& logger)
+:_logger(logger)
 {
 	// By default, we want to combine interlaced fields together into a single frame.
 	combineInterlacedFields = true;
@@ -247,8 +248,7 @@ bool FrameBuilder::PerformColorBurstLineSyncCorrection(FieldInfo& fieldInfo) con
 		}
 		if (!foundSyncCorrection)
 		{
-			//##DEBUG##
-			std::cout << "Color burst sync correction failure!\n";
+			_logger.Error("Color burst sync correction failure! Start sample: {0}, End sample: {1}", lineInfo.leadingSyncInfo.startSampleNo, lineInfo.followingSyncInfo.startSampleNo);
 			continue;
 		}
 
