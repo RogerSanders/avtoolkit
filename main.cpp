@@ -1,156 +1,23 @@
 #include <iostream>
 #include <string>
 #include <vector>
-#include <fstream>
 #include "Logger.h"
 #include "StringHelpers.h"
 #include "FileSystemInterop.h"
-#include "SyncDetector.h"
-#include "FrameBuilder.h"
-#include "FrameConverter.h"
+#include "VideoDecoder.h"
 
 //----------------------------------------------------------------------------------------
-template<class SampleType>
-void WriteFramesToFiles(const Logger& logger, const PathString& outputFolderPath, const PathString& outputFileNameBase, const std::vector<SampleType>& sampleData, const std::vector<FrameBuilder::FrameInfo>& frames, unsigned int lineWidthInPixels, size_t initialFrameNo, unsigned int threadCount = 0)
+enum class SampleType
 {
-	// Determine the number of threads to use for this operation
-	size_t frameCount = frames.size();
-	if (threadCount <= 0)
-	{
-		unsigned int coreCount = std::thread::hardware_concurrency();
-		threadCount = (coreCount > 0) ? coreCount : 4;
-	}
-	if (threadCount > frameCount)
-	{
-		threadCount = 1;
-	}
-
-	FrameConverter frameConverter(logger);
-	size_t chunkCount = threadCount;
-	size_t framesPerChunk = frameCount / chunkCount;
-	size_t extraFrames = frameCount - (framesPerChunk * chunkCount);
-	std::vector<std::thread> workerThreads;
-	for (unsigned int i = 0; i < chunkCount; ++i)
-	{
-		workerThreads.emplace_back(std::thread([&, i]
-		{
-			size_t frameNo = (i * framesPerChunk) + (i > 0 ? extraFrames : 0);
-			size_t lastFrameNoForChunk = frameNo + (framesPerChunk + (i == 0 ? extraFrames : 0));
-			while (frameNo < lastFrameNoForChunk)
-			{
-				const FrameBuilder::FrameInfo& frameEntry = frames[frameNo];
-				PathString outputFilePath = outputFolderPath + PathSeparatorChar + outputFileNameBase + ToPathString(std::to_string(initialFrameNo + frameNo) + ".bmp");
-				frameConverter.WriteFrameToBMP(outputFilePath, sampleData, frameEntry, lineWidthInPixels);
-				++frameNo;
-			}
-		}));
-	}
-	for (auto& entry : workerThreads)
-	{
-		entry.join();
-	}
-}
-
-//----------------------------------------------------------------------------------------
-//##TODO## Wrap this up in a helper class
-template<class SampleType>
-void ConvertCompositeVideoToImages(const PathString& inputFilePath, const PathString& outputFolderPath, const PathString& outputFileNameBase, bool useSlidingWindow, unsigned int lineWidthInPixels, size_t maxChunkSizeInBytes)
-{
-	// Allocate a logger for this operation
-	Logger logger;
-
-	// Mark the current time so we can calculate our total decode time
-	auto startTime = std::chrono::high_resolution_clock::now();
-
-	// Open the target file, and calculate the size of the file in bytes.
-	std::ifstream infile(inputFilePath, std::ios_base::binary);
-	infile.seekg(0, infile.end);
-	size_t fileLengthInBytes = infile.tellg();
-	infile.seekg(0, infile.beg);
-
-	// Process the input file and write detected frames out to disk
-	std::vector<SampleType> fileData;
-	size_t currentFilePos = 0;
-	bool firstPass = true;
-	size_t sampleCountInChunk = 0;
-	size_t continuePos;
-	size_t startFrameNo = 0;
-	while (currentFilePos < fileLengthInBytes)
-	{
-		// Calculate the size of the next chunk of file data to read
-		size_t chunkSizeInBytes = (fileLengthInBytes - currentFilePos);
-		chunkSizeInBytes = (chunkSizeInBytes > maxChunkSizeInBytes) ? maxChunkSizeInBytes : chunkSizeInBytes;
-		sampleCountInChunk = (chunkSizeInBytes / sizeof(SampleType));
-
-		// Prepare the memory buffer to receive file data
-		size_t fileReadStartPos;
-		size_t sampleScanningStartPos;
-		if (firstPass)
-		{
-			fileData.resize(sampleCountInChunk);
-			sampleScanningStartPos = 0;
-			fileReadStartPos = 0;
-			firstPass = false;
-		}
-		else
-		{
-			// Move the last half of the previous chunk data to the start of the data buffer
-			size_t lastSampleCopySize = ((maxChunkSizeInBytes / sizeof(SampleType)) / 2);
-			std::vector<SampleType> tempFileData(lastSampleCopySize + sampleCountInChunk);
-			std::copy(fileData.end() - lastSampleCopySize, fileData.end(), tempFileData.begin());
-			sampleScanningStartPos = lastSampleCopySize - (fileData.size() - continuePos);
-			fileReadStartPos = lastSampleCopySize;
-			fileData = std::move(tempFileData);
-		}
-
-		// Read in the next chunk of file data and store it in the buffer
-		logger.Info("Reading {0} bytes from file pos {1}", chunkSizeInBytes, currentFilePos);
-		infile.read((char*)&fileData[fileReadStartPos], chunkSizeInBytes);
-		currentFilePos += chunkSizeInBytes;
-
-		// Detect sync pulses in the sample data
-		logger.Info("Detecting sync pulses");
-		SyncDetector syncDetector(logger);
-		syncDetector.enableMinMaxSlidingWindow = useSlidingWindow;
-		std::list<SyncDetector::SyncPulseInfo> syncPulseInfo = syncDetector.DetectSyncPulses(fileData, sampleScanningStartPos);
-
-		// Build sync events from the raw sync pulses
-		logger.Info("Extracting sync events");
-		std::list<SyncDetector::SyncInfo> syncInfo = syncDetector.DetectSyncEvents(fileData, syncPulseInfo);
-
-		// Collect the sync events into frames
-		logger.Info("Detecting frames");
-		FrameBuilder frameBuilder(logger);
-		std::list<FrameBuilder::FieldInfo> fields = frameBuilder.DetectFields(fileData, syncInfo);
-		std::vector<FrameBuilder::FrameInfo> frames = frameBuilder.DetectFrames(fields);
-
-		// Decode line information within each detected frame
-		logger.Info("Detecting lines");
-		frameBuilder.DetectLines(fileData, frames);
-
-		// Write each detected frame out to an image file
-		logger.Info("Writing frames");
-		WriteFramesToFiles(logger, outputFolderPath, outputFileNameBase, fileData, frames, lineWidthInPixels, startFrameNo);
-		startFrameNo += frames.size();
-
-		// Calculate a position to resume the search from when the next chunk of file data is read
-		if (!frames.empty())
-		{
-			const FrameBuilder::FieldInfo& lastFieldInfo = frames.back().fields.back();
-			const SyncDetector::SyncInfo& targetSyncInfo = lastFieldInfo.syncEvents[lastFieldInfo.syncEvents.size() / 2];
-			continuePos = targetSyncInfo.startSampleNo;
-		}
-		else
-		{
-			continuePos = 0;
-		}
-	}
-
-	// Log how long it took to decode the target file
-	auto endTime = std::chrono::high_resolution_clock::now();
-	auto totalTimeInMilliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
-	logger.Trace("Total time: {0}", totalTimeInMilliseconds.count());
-}
+	Int8,
+	UInt8,
+	Int16,
+	UInt16,
+	Int32,
+	UInt32,
+	Float32,
+	Float64,
+};
 
 //----------------------------------------------------------------------------------------
 bool ExtractOptionNameFromArg(const std::vector<PathString>& optionPrefixes, const PathString& arg, PathString& optionName)
@@ -167,35 +34,22 @@ bool ExtractOptionNameFromArg(const std::vector<PathString>& optionPrefixes, con
 }
 
 //----------------------------------------------------------------------------------------
-enum class SampleType
-{
-	Int8,
-	UInt8,
-	Int16,
-	UInt16,
-	Int32,
-	UInt32,
-	Float32,
-	Float64,
-};
-
-//----------------------------------------------------------------------------------------
 #if defined(_WIN32) && defined(_UNICODE)
 int wmain(int argc, PathChar* argv[])
 #else
 int main(int argc, PathChar* argv[])
 #endif
 {
+	// Allocate a logger for this program
+	Logger logger;
+
 	// Set our various options to their initial state
 	PathString inputFilePath;
 	PathString outputFolderPath;
 	PathString outputFileNameBase;
 	bool useSlidingWindow = false;
 	bool outputHelp = false;
-	unsigned int lineWidthInPixels = 930;
 	SampleType sampleType;
-	//##FIX## Make this configurable
-	size_t maxChunkSizeInBytes = 1024*1024*1024;
 
 	// Process our command line options
 	std::vector<PathString> argPrefixes = { ToPathString("/"), ToPathString("--"), ToPathString("-") };
@@ -285,6 +139,15 @@ int main(int argc, PathChar* argv[])
 		return 0;
 	}
 
+	// Create and configure the video decoder
+	SyncDetector syncDetector(logger);
+	FrameBuilder frameBuilder(logger);
+	VideoDecoder videoDecoder(syncDetector, frameBuilder, logger);
+	syncDetector.enableMinMaxSlidingWindow = useSlidingWindow;
+
+	// Mark the current time so we can calculate our total decode time
+	auto startTime = std::chrono::high_resolution_clock::now();
+
 	// Process the target composite video sample data
 	//##TODO## These types are right for the sizes on Windows/Linux, but typedef them into guaranteed sizes in a header.
 	//##TODO## Byte ordering is platform dependent currently. Consider if we want to formally support big endian and
@@ -292,29 +155,34 @@ int main(int argc, PathChar* argv[])
 	switch (sampleType)
 	{
 	case SampleType::Int8:
-		ConvertCompositeVideoToImages<signed char>(inputFilePath, outputFolderPath, outputFileNameBase, useSlidingWindow, lineWidthInPixels, maxChunkSizeInBytes);
+		videoDecoder.ConvertCompositeVideoToImages<signed char>(inputFilePath, outputFolderPath, outputFileNameBase);
 		break;
 	case SampleType::UInt8:
-		ConvertCompositeVideoToImages<unsigned char>(inputFilePath, outputFolderPath, outputFileNameBase, useSlidingWindow, lineWidthInPixels, maxChunkSizeInBytes);
+		videoDecoder.ConvertCompositeVideoToImages<unsigned char>(inputFilePath, outputFolderPath, outputFileNameBase);
 		break;
 	case SampleType::Int16:
-		ConvertCompositeVideoToImages<short>(inputFilePath, outputFolderPath, outputFileNameBase, useSlidingWindow, lineWidthInPixels, maxChunkSizeInBytes);
+		videoDecoder.ConvertCompositeVideoToImages<short>(inputFilePath, outputFolderPath, outputFileNameBase);
 		break;
 	case SampleType::UInt16:
-		ConvertCompositeVideoToImages<unsigned short>(inputFilePath, outputFolderPath, outputFileNameBase, useSlidingWindow, lineWidthInPixels, maxChunkSizeInBytes);
+		videoDecoder.ConvertCompositeVideoToImages<unsigned short>(inputFilePath, outputFolderPath, outputFileNameBase);
 		break;
 	case SampleType::Int32:
-		ConvertCompositeVideoToImages<int>(inputFilePath, outputFolderPath, outputFileNameBase, useSlidingWindow, lineWidthInPixels, maxChunkSizeInBytes);
+		videoDecoder.ConvertCompositeVideoToImages<int>(inputFilePath, outputFolderPath, outputFileNameBase);
 		break;
 	case SampleType::UInt32:
-		ConvertCompositeVideoToImages<unsigned int>(inputFilePath, outputFolderPath, outputFileNameBase, useSlidingWindow, lineWidthInPixels, maxChunkSizeInBytes);
+		videoDecoder.ConvertCompositeVideoToImages<unsigned int>(inputFilePath, outputFolderPath, outputFileNameBase);
 		break;
 	case SampleType::Float32:
-		ConvertCompositeVideoToImages<float>(inputFilePath, outputFolderPath, outputFileNameBase, useSlidingWindow, lineWidthInPixels, maxChunkSizeInBytes);
+		videoDecoder.ConvertCompositeVideoToImages<float>(inputFilePath, outputFolderPath, outputFileNameBase);
 		break;
 	case SampleType::Float64:
-		ConvertCompositeVideoToImages<double>(inputFilePath, outputFolderPath, outputFileNameBase, useSlidingWindow, lineWidthInPixels, maxChunkSizeInBytes);
+		videoDecoder.ConvertCompositeVideoToImages<double>(inputFilePath, outputFolderPath, outputFileNameBase);
 		break;
 	}
+
+	// Log how long it took to decode the target file
+	auto endTime = std::chrono::high_resolution_clock::now();
+	auto totalTimeInMilliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+	logger.Trace("Total time: {0}", totalTimeInMilliseconds.count());
 	return 0;
 }

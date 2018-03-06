@@ -191,3 +191,9 @@ void Logger::ResolveArg(T arg, std::string& argResolved) const
 	stringStream << std::fixed << arg;
 	argResolved = stringStream.str();
 }
+
+//----------------------------------------------------------------------------------------------------------------------
+void Logger::ResolveArg(const std::wstring& arg, std::string& argResolved) const
+{
+	argResolved = std::string(arg.begin(), arg.end());
+}

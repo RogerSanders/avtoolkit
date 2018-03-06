@@ -8,8 +8,8 @@
     <ClCompile Include="FrameBuilder.cpp">
       <Filter>FrameBuilder</Filter>
     </ClCompile>
-    <ClCompile Include="FrameConverter.cpp">
-      <Filter>FrameConverter</Filter>
+    <ClCompile Include="VideoDecoder.cpp">
+      <Filter>VideoDecoder</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -19,11 +19,11 @@
     <Filter Include="FrameBuilder">
       <UniqueIdentifier>{6daa5726-732d-43d6-944b-6296e5b16397}</UniqueIdentifier>
     </Filter>
-    <Filter Include="FrameConverter">
-      <UniqueIdentifier>{abd3288c-bd07-4236-9a0e-30e5505ab66b}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Helper Types">
       <UniqueIdentifier>{93b25eee-e0e6-4c72-9224-167838f8afc1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="VideoDecoder">
+      <UniqueIdentifier>{abd3288c-bd07-4236-9a0e-30e5505ab66b}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -32,9 +32,6 @@
     </ClInclude>
     <ClInclude Include="FrameBuilder.h">
       <Filter>FrameBuilder</Filter>
-    </ClInclude>
-    <ClInclude Include="FrameConverter.h">
-      <Filter>FrameConverter</Filter>
     </ClInclude>
     <ClInclude Include="SplineHelpers.h">
       <Filter>Helper Types</Filter>
@@ -48,6 +45,9 @@
     <ClInclude Include="StringHelpers.h">
       <Filter>Helper Types</Filter>
     </ClInclude>
+    <ClInclude Include="VideoDecoder.h">
+      <Filter>VideoDecoder</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="SyncDetector.inl">
@@ -56,11 +56,11 @@
     <None Include="FrameBuilder.inl">
       <Filter>FrameBuilder</Filter>
     </None>
-    <None Include="FrameConverter.inl">
-      <Filter>FrameConverter</Filter>
-    </None>
     <None Include="Logger.inl">
       <Filter>Helper Types</Filter>
+    </None>
+    <None Include="VideoDecoder.inl">
+      <Filter>VideoDecoder</Filter>
     </None>
   </ItemGroup>
 </Project>

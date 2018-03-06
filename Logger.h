@@ -55,6 +55,7 @@ private:
 	void ResolveArgs(std::string* argAsString, T arg, Args... args) const;
 	template<class T>
 	void ResolveArg(T arg, std::string& argResolved) const;
+	inline void ResolveArg(const std::wstring& arg, std::string& argResolved) const;
 
 private:
 	mutable std::mutex _accessMutex;

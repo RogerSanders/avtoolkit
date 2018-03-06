@@ -85,9 +85,11 @@ private:
 	template<class Iter>
 	static double FindMedianValue(Iter first, Iter last);
 
+private:
+	const Logger& _logger;
+
 //##DEBUG##
 public:
-	const Logger& _logger;
 	bool combineInterlacedFields;
 	bool interlaceHalfLineInFirstField;
 	double syncAmplitudeMinTolerance;

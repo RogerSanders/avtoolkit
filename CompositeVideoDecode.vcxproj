@@ -118,14 +118,14 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="FrameBuilder.cpp" />
-    <ClCompile Include="FrameConverter.cpp" />
+    <ClCompile Include="VideoDecoder.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="SyncDetector.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="FileSystemInterop.h" />
     <ClInclude Include="FrameBuilder.h" />
-    <ClInclude Include="FrameConverter.h" />
+    <ClInclude Include="VideoDecoder.h" />
     <ClInclude Include="Logger.h" />
     <ClInclude Include="SplineHelpers.h" />
     <ClInclude Include="StringHelpers.h" />
@@ -133,7 +133,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="FrameBuilder.inl" />
-    <None Include="FrameConverter.inl" />
+    <None Include="VideoDecoder.inl" />
     <None Include="Logger.inl" />
     <None Include="SyncDetector.inl" />
   </ItemGroup>

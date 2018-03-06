@@ -100,9 +100,11 @@ private:
 	void TrimRunEntry(const std::vector<SampleType>& sampleData, RunEntry<SampleType>& runEntry, SampleType trimSampleTooHighThreshold, SampleType trimSampleTooLowThreshold, size_t maxTrimSampleCount) const;
 	size_t GetMostCommonSyncPulseLength(const std::map<size_t, size_t>& syncPulseLengthCounts) const;
 
+private:
+	const Logger& _logger;
+
 //##DEBUG##
 public:
-	const Logger& _logger;
 	double runRangeValueDeviance;
 	double runRangeTrimTolerance;
 	double runRangeMaxTrimLength;

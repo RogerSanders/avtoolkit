@@ -1,0 +1,75 @@
+#ifndef __VIDEODECODER_H__
+#define __VIDEODECODER_H__
+#include "Logger.h"
+#include "FileSystemInterop.h"
+#include "FrameBuilder.h"
+#include "SyncDetector.h"
+#include <string>
+#include <vector>
+
+class VideoDecoder
+{
+public:
+	// Constructors
+	VideoDecoder(const SyncDetector& syncDetector, const FrameBuilder& frameBuilder, const Logger& logger);
+
+	// Video conversion methods
+	template<class SampleType>
+	bool ConvertCompositeVideoToImages(const PathString& inputFilePath, const PathString& outputFolderPath, const PathString& outputFileNameBase) const;
+	template<class SampleType>
+	void WriteFramesToBMP(const PathString& outputFolderPath, const PathString& outputFileNameBase, const std::vector<SampleType>& sampleData, const std::vector<FrameBuilder::FrameInfo>& frames, size_t initialFrameNo, unsigned int threadCount = 0) const;
+	template<class SampleType>
+	bool WriteFrameToBMP(const PathString& outputFilePath, const std::vector<SampleType>& sampleData, const FrameBuilder::FrameInfo& frameInfo) const;
+
+private:
+	// Enumerations
+	enum class BitmapCompressionType : unsigned int
+	{
+		RGB = 0,
+		RLE8 = 1,
+		RLE4 = 2,
+		Bitfields = 3,
+		JPEG = 4,
+		PNG = 5,
+	};
+
+private:
+	// Structures
+	struct BitmapFileHeader
+	{
+		unsigned short bfType;
+		unsigned int bfSize;
+		short bfReserved1;
+		short bfReserved2;
+		unsigned int bfOffBits;
+	};
+	struct BitmapInfoHeader
+	{
+		unsigned int biSize;
+		int biWidth;
+		int biHeight;
+		short biPlanes;
+		short biBitCount;
+		BitmapCompressionType biCompression;
+		unsigned int biSizeImage;
+		int biXPelsPerMeter;
+		int biYPelsPerMeter;
+		unsigned int biClrUsed;
+		unsigned int biClrImportant;
+	};
+
+private:
+	const Logger& _logger;
+	const SyncDetector& _syncDetector;
+	const FrameBuilder& _frameBuilder;
+
+	//##DEBUG##
+public:
+	double blankingPercentage;
+	double blankingLeadingPercentage;
+	unsigned int lineWidthInPixels;
+	size_t maxChunkSizeInBytes;
+};
+
+#include "VideoDecoder.inl"
+#endif
