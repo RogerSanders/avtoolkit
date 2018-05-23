@@ -3,8 +3,8 @@
 //----------------------------------------------------------------------------------------------------------------------
 // Constructors
 //----------------------------------------------------------------------------------------------------------------------
-SyncDetector::SyncDetector(const Logger& logger)
-:_logger(logger)
+SyncDetector::SyncDetector(const Logger& log)
+:_log(log)
 {
 	// Set our initial setting values
 	RestoreDefaultSettings();

@@ -11,7 +11,7 @@ class VideoDecoder
 {
 public:
 	// Constructors
-	VideoDecoder(const SyncDetector& syncDetector, const FrameBuilder& frameBuilder, const Logger& logger);
+	VideoDecoder(const SyncDetector& syncDetector, const FrameBuilder& frameBuilder, const Logger& log);
 
 	// Video conversion methods
 	template<class SampleType>
@@ -57,9 +57,34 @@ private:
 		unsigned int biClrUsed;
 		unsigned int biClrImportant;
 	};
+	struct DecodeLinePixelDataBuffer
+	{
+		std::vector<double> carrierWaveISamplePoints;
+		std::vector<double> carrierWaveQSamplePoints;
+		std::vector<double> samplePointsQ;
+		std::vector<double> samplePointsI;
+		std::vector<double> samplePointsY;
+		std::vector<double> lineResolutionOutputR;
+		std::vector<double> lineResolutionOutputG;
+		std::vector<double> lineResolutionOutputB;
+	};
 
 private:
-	const Logger& _logger;
+	// Video conversion methods
+	bool GetWavePeakPositionsForLine(const FrameBuilder::LineInfo& lineInfo, std::vector<double>& wavePeakPositions, bool& firstWavePeakIsPositive) const;
+	void CalculateIRELevelsForField(const FrameBuilder::FieldInfo& fieldInfo, double& ireLevel0ForField, double& ireLevel100ForField) const;
+	double CalculateColorBurstWaveFrequencyForLine(const FrameBuilder::LineInfo& lineInfo, std::vector<double>& wavePeakPositions) const;
+	double CalculateColorBurstWaveFrequencyForField(const FrameBuilder::FieldInfo& fieldInfo) const;
+	void PhaseLockColorBurstSamples(std::vector<double> wavePeakPositions, bool firstWavePeakIsPositive, std::vector<double> targetWavePeakPositions, bool firstTargetWavePeakIsPositive, double burstWaveFrequency, size_t& bestMatchPeakPositionIndex, bool& bestMatchPeakPositionIsPositive, double& phaseLockDisplacement) const;
+	static void ConvertYIQToRGB(double sampleY, double sampleI, double sampleQ, double& red, double& green, double& blue);
+	static void ConvertYUVToRGB(double sampleY, double sampleU, double sampleV, double& red, double& green, double& blue);
+	template<class SampleType>
+	void DecodeMonochromeLinePixelDataForActiveScanRegion(const std::vector<SampleType>& sampleData, const FrameBuilder::FieldInfo& fieldInfo, const FrameBuilder::LineInfo& lineInfo, size_t lineNo, double preciseLineStartPos, double preciseLineEndPos, double ireLevel0ForField, double ireLevel100ForField, unsigned int outputPixelCount, std::vector<double>& outputDataR, std::vector<double>& outputDataG, std::vector<double>& outputDataB, DecodeLinePixelDataBuffer& buffer) const;
+	template<class SampleType>
+	bool DecodeColorLinePixelDataForActiveScanRegion(const std::vector<SampleType>& sampleData, const FrameBuilder::FieldInfo& fieldInfo, const FrameBuilder::LineInfo& lineInfo, size_t lineNo, double preciseLineStartPos, double preciseLineEndPos, double burstWaveFrequencyForField, double ireLevel0ForField, double ireLevel100ForField, unsigned int outputPixelCount, std::vector<double>& outputDataR, std::vector<double>& outputDataG, std::vector<double>& outputDataB, DecodeLinePixelDataBuffer& buffer) const;
+
+private:
+	const Logger& _log;
 	const SyncDetector& _syncDetector;
 	const FrameBuilder& _frameBuilder;
 
@@ -69,6 +94,18 @@ public:
 	double blankingLeadingPercentage;
 	unsigned int lineWidthInPixels;
 	size_t maxChunkSizeInBytes;
+	size_t burstWaveSkipCount;
+	bool useAverageFieldBlankingLevel;
+	bool useAverageFieldBurstWaveFrequency;
+	bool matchColorBurstPhaseBetweenLines;
+	bool rawOutputOnly;
+	bool decodeColor;
+	bool useIRE7Point5;
+	bool decodeAsYUV;
+	double waveFrequencyTolerance;
+	bool forceMonoOutputForColorDecoding;
+	bool forceColorBurstWaveFrequency;
+	double forcedColorBurstWaveFrequency;
 };
 
 #include "VideoDecoder.inl"

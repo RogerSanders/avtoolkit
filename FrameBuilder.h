@@ -47,7 +47,7 @@ public:
 
 public:
 	// Constructors
-	FrameBuilder(const Logger& logger);
+	FrameBuilder(const Logger& log);
 
 	// Frame detection methods
 	template<class SampleType>
@@ -75,18 +75,16 @@ private:
 	bool RepairColorBurst(const std::vector<SampleType>& backPorchData, SampleType zeroLevel, SampleType burstAmplitude, std::vector<ColorBurstWaveInfo>& burstWaves) const;
 	bool PerformColorBurstLineSyncCorrection(FieldInfo& fieldInfo) const;
 
+	//##FIX##
+public:
 	// IRE conversion methods
 	template<class SampleType>
 	float SampleToIRE(SampleType sampleValue, float ireLevel0, float ireLevel100) const;
 	template<class SampleType>
 	SampleType IREToSample(float ire, float ireLevel0, float ireLevel100) const;
 
-	// Math helper methods
-	template<class Iter>
-	static double FindMedianValue(Iter first, Iter last);
-
 private:
-	const Logger& _logger;
+	const Logger& _log;
 
 //##DEBUG##
 public:

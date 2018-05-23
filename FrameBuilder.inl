@@ -1,4 +1,5 @@
 #include "SplineHelpers.h"
+#include "StatisticsHelpers.h"
 #include <sstream>
 
 //----------------------------------------------------------------------------------------------------------------------
@@ -210,7 +211,7 @@ void FrameBuilder::DetectLines(const std::vector<SampleType>& sampleData, FieldI
 			//predict broken hsync pulses.
 			if (!lineInfo.colorBurstValid)
 			{
-				_logger.Error("Failed to detect colour burst on hsync!\t{0}\t{1}\t{2}\t{3}", lineInfo.leadingSyncInfo.startSampleNo, backPorchFlatStartPos, lineInfo.backPorchStartPos, lineInfo.frontPorchEndPos);
+				_log.Error("Failed to detect colour burst on hsync!\t{0}\t{1}\t{2}\t{3}", lineInfo.leadingSyncInfo.startSampleNo, backPorchFlatStartPos, lineInfo.backPorchStartPos, lineInfo.frontPorchEndPos);
 			}
 
 			// Convert our colour burst wave positions back to absolute sample positions
@@ -288,10 +289,10 @@ void FrameBuilder::DetectColorBurst(const std::vector<SampleType>& backPorchData
 {
 	// Detect all possible burst waves in the sample region
 	burstWaves.reserve(30);
-	size_t runStartPos = 0;
+	double runStartPos = 0;
 	SampleType runPeakSample = backPorchData[0];
 	bool runIsPositive = (runPeakSample > zeroLevel);
-	for (unsigned int i = 1; i < backPorchData.size(); ++i)
+	for (size_t i = 1; i < backPorchData.size(); ++i)
 	{
 		// If the current sample crosses the zero-level, accept the previous run as a burst wave if it meets the burst
 		// amplitude, and start a new run from the current sample.
@@ -300,6 +301,15 @@ void FrameBuilder::DetectColorBurst(const std::vector<SampleType>& backPorchData
 		bool crossedZeroLevel = (runIsPositive != currentSampleIsPositive);
 		if (crossedZeroLevel)
 		{
+			// Calculate an approximate position at which the burst wave crossed the zero level, using linear
+			// interpolation. We already have an upsampled region to examine here which was generated using cubic
+			// interpolation, so we don't need to go overboard trying to fit the zero level crossing to a curve. Using
+			// linear interpolation on our upsampled data will be sufficient, especially considering we expect curvature
+			// to be at a minimum where the sine wave crosses the zero level.
+			size_t lastSampleNo = i - 1;
+			SampleType lastSample = backPorchData[lastSampleNo];
+			double crossZeroLevelPos = (double)(lastSampleNo) + ((double)zeroLevel - (double)lastSample) / ((double)currentSample - (double)lastSample);
+
 			// If the previous run reached burst amplitude, add it to the list of detected burst waves.
 			bool runReachedBurstAmplitude = (runIsPositive ? ((zeroLevel + burstAmplitude) <= runPeakSample) : ((zeroLevel - burstAmplitude) >= runPeakSample));
 			if (runReachedBurstAmplitude)
@@ -307,14 +317,14 @@ void FrameBuilder::DetectColorBurst(const std::vector<SampleType>& backPorchData
 				ColorBurstWaveInfo waveInfo;
 				waveInfo.isPositive = runIsPositive;
 				waveInfo.peakLevel = (double)runPeakSample;
-				waveInfo.startPos = (double)runStartPos;
-				waveInfo.endPos = (double)i;
+				waveInfo.startPos = runStartPos;
+				waveInfo.endPos = crossZeroLevelPos;
 				waveInfo.isPredicted = false;
 				burstWaves.push_back(std::move(waveInfo));
 			}
 
 			// Start a new run from the current sample, and advance to the next sample.
-			runStartPos = i;
+			runStartPos = crossZeroLevelPos;
 			runPeakSample = currentSample;
 			runIsPositive = currentSampleIsPositive;
 			continue;
@@ -355,6 +365,8 @@ bool FrameBuilder::RepairColorBurst(const std::vector<SampleType>& backPorchData
 	// noise or other interference, in which case our average sample length may be different for positive and negative
 	// pulses.
 	//##TODO## Compare this approach with an arithmetic median calculation.
+	//##TODO## Consider using the length difference in positive and negative colour burst wave oscillations to improve
+	//the calculated blanking level
 	const double colorBurstAverageCalculationTolerance = 0.05;
 	std::map<double, unsigned int> waveLengthAveragesPositive;
 	std::map<double, unsigned int> waveLengthAveragesNegative;
@@ -578,36 +590,5 @@ float FrameBuilder::SampleToIRE(SampleType sampleValue, float ireLevel0, float i
 template<class SampleType>
 SampleType FrameBuilder::IREToSample(float ire, float ireLevel0, float ireLevel100) const
 {
-	return (SampleType)(((ire * ((ireLevel100 - ireLevel0) / 100.0f)) + ireLevel0) + (std::numeric_limits<T>::is_integer ? 0.5f : 0.0f));
-}
-
-//----------------------------------------------------------------------------------------------------------------------
-// Math helper methods
-//----------------------------------------------------------------------------------------------------------------------
-template<class Iter>
-double FrameBuilder::FindMedianValue(Iter first, Iter last)
-{
-	typedef typename std::iterator_traits<Iter>::value_type ValueType;
-	std::vector<ValueType> sortedEntries(first, last);
-	std::sort(sortedEntries.begin(), sortedEntries.end());
-
-	double meanValue = 0;
-	size_t entryCount = sortedEntries.size();
-	if (entryCount == 0)
-	{
-		return meanValue;
-	}
-	if ((entryCount & 2) != 0)
-	{
-		auto middleElementIterator = (sortedEntries.begin() + (entryCount >> 1));
-		std::nth_element(sortedEntries.begin(), middleElementIterator, sortedEntries.end());
-		meanValue = (double)*middleElementIterator;
-	}
-	else
-	{
-		auto secondMiddleElementIterator = (sortedEntries.begin() + (entryCount >> 1)) + 1;
-		std::nth_element(sortedEntries.begin(), secondMiddleElementIterator, sortedEntries.end());
-		meanValue = ((double)*secondMiddleElementIterator + (double)*(secondMiddleElementIterator - 1)) / 2;
-	}
-	return meanValue;
+	return (SampleType)(((ire * ((ireLevel100 - ireLevel0) / 100.0f)) + ireLevel0) + (std::numeric_limits<SampleType>::is_integer ? 0.5f : 0.0f));
 }

@@ -48,6 +48,9 @@
     <ClInclude Include="VideoDecoder.h">
       <Filter>VideoDecoder</Filter>
     </ClInclude>
+    <ClInclude Include="StatisticsHelpers.h">
+      <Filter>Helper Types</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="SyncDetector.inl">

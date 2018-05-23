@@ -41,7 +41,7 @@ int main(int argc, PathChar* argv[])
 #endif
 {
 	// Allocate a logger for this program
-	Logger logger;
+	Logger log;
 
 	// Set our various options to their initial state
 	PathString inputFilePath;
@@ -62,23 +62,23 @@ int main(int argc, PathChar* argv[])
 		{
 			outputHelp = true;
 		}
-		else if (StringEquals(optionName, ToPathString("i"), true) && (currentArg < argc))
+		else if ((StringEquals(optionName, ToPathString("i"), true) || StringEquals(optionName, ToPathString("InputPath"), true)) && (currentArg < argc))
 		{
 			inputFilePath = argv[currentArg++];
 		}
-		else if (StringEquals(optionName, ToPathString("o"), true) && (currentArg < argc))
+		else if ((StringEquals(optionName, ToPathString("o"), true) || StringEquals(optionName, ToPathString("OutputPath"), true)) && (currentArg < argc))
 		{
 			outputFolderPath = argv[currentArg++];
 		}
-		else if (StringEquals(optionName, ToPathString("b"), true) && (currentArg < argc))
+		else if ((StringEquals(optionName, ToPathString("b"), true) || StringEquals(optionName, ToPathString("BaseOutputName"), true)) && (currentArg < argc))
 		{
 			outputFileNameBase = argv[currentArg++];
 		}
-		else if (StringEquals(optionName, ToPathString("s"), true))
+		else if (StringEquals(optionName, ToPathString("s"), true) || StringEquals(optionName, ToPathString("SlidingWindow"), true))
 		{
 			useSlidingWindow = true;
 		}
-		else if (StringEquals(optionName, ToPathString("t"), true) && (currentArg < argc))
+		else if ((StringEquals(optionName, ToPathString("t"), true) || StringEquals(optionName, ToPathString("SampleType"), true)) && (currentArg < argc))
 		{
 			PathString sampleTypeAsString = argv[currentArg++];
 			if (StringEquals(sampleTypeAsString, ToPathString("Int8"), true))
@@ -121,7 +121,7 @@ int main(int argc, PathChar* argv[])
 	{
 		std::cout << "Processes raw composite video data and converts it into other forms\n"
 		             "\n"
-		             "CompositeVideoDecode /i inputFilePath /o outputPath [/t sampleType] [/b baseOutputFileName] [/s]\n"
+		             "CompositeVideoDecode /i inputFilePath /o outputPath [/b baseOutputFileName] [/t sampleType] [/s]\n"
 		             "\n"
 		             "/i     Specifies the input file containing raw composite sample data\n"
 		             "/o     Specifies the output folder or file (depending other on options) to write the data to\n"
@@ -140,9 +140,9 @@ int main(int argc, PathChar* argv[])
 	}
 
 	// Create and configure the video decoder
-	SyncDetector syncDetector(logger);
-	FrameBuilder frameBuilder(logger);
-	VideoDecoder videoDecoder(syncDetector, frameBuilder, logger);
+	SyncDetector syncDetector(log);
+	FrameBuilder frameBuilder(log);
+	VideoDecoder videoDecoder(syncDetector, frameBuilder, log);
 	syncDetector.enableMinMaxSlidingWindow = useSlidingWindow;
 
 	// Mark the current time so we can calculate our total decode time
@@ -183,6 +183,6 @@ int main(int argc, PathChar* argv[])
 	// Log how long it took to decode the target file
 	auto endTime = std::chrono::high_resolution_clock::now();
 	auto totalTimeInMilliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
-	logger.Trace("Total time: {0}", totalTimeInMilliseconds.count());
+	log.Trace("Total time: {0}", totalTimeInMilliseconds.count());
 	return 0;
 }

@@ -125,6 +125,7 @@
   <ItemGroup>
     <ClInclude Include="FileSystemInterop.h" />
     <ClInclude Include="FrameBuilder.h" />
+    <ClInclude Include="StatisticsHelpers.h" />
     <ClInclude Include="VideoDecoder.h" />
     <ClInclude Include="Logger.h" />
     <ClInclude Include="SplineHelpers.h" />

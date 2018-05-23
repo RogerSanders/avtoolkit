@@ -5,8 +5,8 @@
 //----------------------------------------------------------------------------------------
 // Constructors
 //----------------------------------------------------------------------------------------
-FrameBuilder::FrameBuilder(const Logger& logger)
-:_logger(logger)
+FrameBuilder::FrameBuilder(const Logger& log)
+:_log(log)
 {
 	// By default, we want to combine interlaced fields together into a single frame.
 	combineInterlacedFields = true;
@@ -47,6 +47,7 @@ FrameBuilder::FrameBuilder(const Logger& logger)
 	// some tolerance.
 	colorBurstIREDetectionThreshold = 0.06;
 
+	//##TODO## Comment this
 	colorBurstLineSyncTolerance = 0.48;
 
 	// When enabled, this option allows the colour burst to be used to error-correct horizontal sync, to provide better
@@ -248,7 +249,7 @@ bool FrameBuilder::PerformColorBurstLineSyncCorrection(FieldInfo& fieldInfo) con
 		}
 		if (!foundSyncCorrection)
 		{
-			_logger.Error("Color burst sync correction failure! Start sample: {0}, End sample: {1}", lineInfo.leadingSyncInfo.startSampleNo, lineInfo.followingSyncInfo.startSampleNo);
+			_log.Error("Color burst sync correction failure! Start sample: {0}, End sample: {1}", lineInfo.leadingSyncInfo.startSampleNo, lineInfo.followingSyncInfo.startSampleNo);
 			continue;
 		}
 

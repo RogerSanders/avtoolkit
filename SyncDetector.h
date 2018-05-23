@@ -37,7 +37,7 @@ public:
 
 public:
 	// Constructors
-	SyncDetector(const Logger& logger);
+	SyncDetector(const Logger& log);
 
 	// Settings methods
 	void RestoreDefaultSettings();
@@ -101,7 +101,7 @@ private:
 	size_t GetMostCommonSyncPulseLength(const std::map<size_t, size_t>& syncPulseLengthCounts) const;
 
 private:
-	const Logger& _logger;
+	const Logger& _log;
 
 //##DEBUG##
 public:

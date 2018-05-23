@@ -133,12 +133,12 @@ public:
 		_polynomials.emplace_back(CreateSplineCatmullRomUniform(convertedSamples[(convertedSamplePos + 0) & 3], convertedSamples[(convertedSamplePos + 1) & 3], convertedSamples[(convertedSamplePos + 2) & 3], convertedSamples[(convertedSamplePos + 3) & 3]));
 	}
 
-	double Evaluate(double samplePos)
+	double Evaluate(double samplePos) const
 	{
 		size_t sampleBaseNo = (size_t)samplePos;
 		double sampleOffset = samplePos - sampleBaseNo;
 		sampleBaseNo = ((sampleOffset == 0) && (sampleBaseNo > 0)) ? (sampleBaseNo - 1) : sampleBaseNo;
-		CubicPolynomial<double>& cubicPolynomial = _polynomials[sampleBaseNo];
+		const CubicPolynomial<double>& cubicPolynomial = _polynomials[sampleBaseNo];
 		return cubicPolynomial.Evaluate(sampleOffset);
 	}
 
@@ -220,6 +220,10 @@ CubicPolynomial<T> CreateSplineCatmullRomChordal(const T* data)
 }
 
 //----------------------------------------------------------------------------------------
+//##FIX## This currently assumes the input data is a segment in a buffer, which contains at least one sample before the
+//target start position, and two samples after the target end position. Switch to a vector as the input, so we can
+//safely test for this, and extrapolate leading and following samples where no more data exists.
+//##FIX## Allow starting and ending positions to be specified instead of using the output buffer in its entirety
 template<class T>
 void CubicInterpolateCatmullRom(const T* data, double startPos, double endPos, std::vector<T>& outputData)
 {
